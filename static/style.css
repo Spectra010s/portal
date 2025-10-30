@@ -1,0 +1,118 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap");
+
+body {
+  background: #f4f4f9;
+  font-family: "Poppins", sans-serif;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
+  padding: 20px;
+}
+
+.container {
+  background: white;
+  padding: 60px;
+  border-radius: 16px;
+  box-shadow: 0 6px 25px rgba(0, 0, 0, 0.15);
+  text-align: center;
+  width: 95%;
+  max-width: 1400px;
+  min-height: 500px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  box-sizing: border-box;
+  margin: 0 auto;
+}
+
+h2 {
+  color: #4b0082;
+  margin-bottom: 40px;
+  font-size: 3rem;
+  width: 100%;
+}
+
+input[type="file"] {
+  display: block;
+  width: 80%;
+  min-width: 400px;
+  margin: 0 auto 35px auto;
+  padding: 15px;
+  border: 2px solid #4b0082;
+  border-radius: 10px;
+  background-color: #fafafa;
+  cursor: pointer;
+  font-size: 18px;
+  box-shadow: 0 3px 8px rgba(75, 0, 130, 0.25);
+  transition:
+    box-shadow 0.3s ease,
+    border-color 0.3s ease;
+}
+
+input[type="file"]:hover {
+  box-shadow: 0 5px 12px rgba(75, 0, 130, 0.35);
+  border-color: #3a006a;
+}
+
+button {
+  width: 60%;
+  min-width: 250px;
+  font-size: 1.3rem;
+  padding: 18px 0;
+  background: #4b0082;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.3s;
+  font-weight: 600;
+}
+
+button:hover {
+  background: #36005d;
+}
+
+button:disabled {
+  background: #999;
+  cursor: not-allowed;
+}
+
+.message {
+  margin-top: 30px;
+  color: #4b0082;
+  font-weight: 600;
+  font-size: 1.4rem;
+}
+
+footer {
+  text-align: center;
+  padding: 20px 0;
+  color: #666;
+  font-size: 14px;
+  position: relative;
+  bottom: 0;
+  width: 100%;
+}
+
+footer a {
+  color: #666;
+  text-decoration: underline;
+  margin-left: 5px;
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.fade-out {
+  animation: fadeOut 0.5s ease forwards;
+}

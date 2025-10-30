@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="author" content="Hiverra Industries" />
+    <meta
+      name="description"
+      content="Portal is a secure and simple way to upload files and images directly over HTTPS, preserving quality and making sharing fast and easy."
+    />
+    <title>Portal — upload</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="{{ url_for('static', filename='favicon-32x32.png') }}"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="16x16"
+      href="{{ url_for('static', filename='favicon-16x16.png') }}"
+    />
+    <link
+      rel="icon"
+      type="image/x-icon"
+      href="{{ url_for('static', filename='favicon.ico') }}"
+    />
+  </head>
+
+  <body>
+    <div class="container">
+      <h2>Choose the Pic Files and upload Mr President</h2>
+
+      <form method="POST" enctype="multipart/form-data" id="uploadForm">
+        <input type="file" name="files" multiple />
+        <button type="submit" id="uploadBtn">Upload</button>
+      </form>
+
+      <p
+        class="message"
+        id="statusMessage"
+        {%
+        if
+        not
+        message
+        %}style="display:none"
+        {%
+        endif
+        %}
+      >
+        {{ message }}
+      </p>
+    </div>
+
+    <script>
+      const form = document.getElementById("uploadForm");
+      const uploadBtn = document.getElementById("uploadBtn");
+      const statusMsg = document.getElementById("statusMessage");
+
+      form.addEventListener("submit", () => {
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = "Uploading...";
+      });
+
+      if (statusMsg.textContent.trim() !== "") {
+        setTimeout(() => {
+          statusMsg.classList.add("fade-out");
+          setTimeout(() => {
+            statusMsg.style.display = "none";
+          }, 500);
+        }, 3000);
+      }
+    </script>
+  </body>
+</html>
