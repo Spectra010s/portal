@@ -43,9 +43,8 @@
     <script type="module">
       import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
-      const SUPABASE_URL = "https://vntoilpsqhgdkklofuki.supabase.co";
-      const SUPABASE_ANON_KEY =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudG9pbHBzcWhnZGtrbG9mdWtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk5NDY1ODYsImV4cCI6MjA3NTUyMjU4Nn0.2WBQe3WTWUtSxg_Z8uSbbnG_Y9R0M6IrVKhHoC6-xuE";
+      const SUPABASE_URL = "your supabase url";
+      const SUPABASE_ANON_KEY = "your api anon key";
       const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
       const form = document.getElementById("uploadForm");
