@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 // 1. Defining the Map (The Struct)
 #[derive(Parser)]
@@ -15,7 +16,7 @@ struct Cli {
 enum Commands {
     /// Send a file
     Send {
-        file: String,
+        file: PathBuf, // changed it to PathBuf, so as to hold "File System Object".
     },
     /// Receive a file
     Receive,
@@ -28,7 +29,7 @@ fn main() {
     // 4. Act on the input
     match &cli.command {
         Commands::Send { file } => {
-            println!("Portal: Preparing to send '{}'...", file);
+            println!("Portal: Preparing to send '{}'...", file.display());
         }
         Commands::Receive => {
             println!("Portal: Waiting for incoming files...");
