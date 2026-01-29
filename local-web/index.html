@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Portal | formerly T-Share</title>
+  <style>
+    body{
+      font-family:system-ui,Segoe UI,Roboto,Arial;
+      margin:0;
+      padding:0;
+      background:#f6f7fb;
+      color:#111
+    }
+    header{
+      background:#3b3bff;
+      color:white;
+      padding:14px 18px;
+      font-weight:600
+    }
+    .container{
+      padding:16px
+    }
+    .crumbs{
+      margin-bottom:12px;
+      color:#555
+    }
+    .list{
+      background:white;
+      border-radius:8px;
+      padding:8px;
+      box-shadow:0 6px 12px rgba(0,0,0,0.06)
+    }
+    .item{
+      display:flex;
+      flex-direction:column;
+      padding:10px 8px;
+      border-bottom:1px solid #f0f0f5
+    }
+    .item:last-child{
+      border-bottom:0
+    }
+    .top-row{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;width:100%
+    }
+    .name{
+      display:flex;
+      gap:10px;
+      align-items:center
+    }
+    .btn{padding:6px 10px;
+    border-radius:6px;
+    border:0;
+    background:#3b3bff;
+    color:white;
+    cursor:pointer;
+    text-decoration:none;
+    font-size:0.9rem
+    }
+    .btn:active{
+      transform:translateY(1px)
+    }
+    .muted{
+      color:#666;
+      font-size:0.9rem
+    }
+    .folder{
+      font-weight:600;
+    color:#1d1d5a
+    }
+    .preview-area{
+      margin-top:10px;
+      max-width:100%;
+      display:flex;
+      justify-content:flex-start
+    }
+    .preview-media{
+      max-width:300px;
+      max-height:200px;
+      border-radius:4px;
+      border:1px solid #ddd;
+      background:#000
+    }
+    a{
+      color:inherit;
+      text-decoration:none
+    }
+  </style>
+</head>
+<body>
+  <header>Portal | formerly T-Share — Files on your device</header>
+  <div class="container">
+    <div class="crumbs" id="crumbs">/</div>
+    <div class="list" id="list"></div>
+  </div>
+
+<script>
+const base = "/";
+async function fetchList(path=""){
+  const url = "/api/list?path=" + encodeURIComponent(path);
+  const r = await fetch(url);
+  if (!r.ok) {
+    document.getElementById("list").innerHTML = "<div class='muted'>Failed to list folder</div>";
+    return;
+  }
+  const data = await r.json();
+  render(data);
+}
+
+function render(data){
+  const listEl = document.getElementById("list");
+  const crumbs = document.getElementById("crumbs");
+  const curPath = data.path === "." ? "" : data.path;
+  crumbs.textContent = "/" + curPath;
+  listEl.innerHTML = "";
+
+  if (curPath !== "") {
+    const upPath = curPath.split("/").slice(0,-1).join("/");
+    const up = document.createElement("div");
+    up.className = "item";
+    up.innerHTML = `<div class="top-row"><div class="name">⬆️ ..</div><div><button class='btn' onclick='go("${upPath}")'>Up</button></div></div>`;
+    listEl.appendChild(up);
+  }
+
+  data.items.forEach(it => {
+    const row = document.createElement("div");
+    row.className = "item";
+    
+    const topRow = document.createElement("div");
+    topRow.className = "top-row";
+
+    const nm = document.createElement("div");
+    nm.className = "name";
+    nm.innerHTML = (it.is_dir ? "📁" : "📄") + " " + `<span class="${it.is_dir? "folder":""}">${it.name}</span>`;
+    
+    const actions = document.createElement("div");
+    if (it.is_dir) {
+      actions.innerHTML = `
+        <button class="btn" onclick='openDir("${it.path}")'>Open</button>
+        <button class="btn" onclick='downloadZip("${it.path}")'>Download ZIP</button>
+      `;
+    } else {
+      actions.innerHTML = `<a class="btn" href="/download?path=${encodeURIComponent(it.path)}">Download</a>`;
+    }
+
+    topRow.appendChild(nm);
+    topRow.appendChild(actions);
+    row.appendChild(topRow);
+
+    // Inline Preview Logic
+    if (!it.is_dir) {
+      const isVideo = /\.(mp4|webm|ogg)$/i.test(it.name);
+      const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(it.name);
+      
+      if (isVideo || isImage) {
+        const previewArea = document.createElement("div");
+        previewArea.className = "preview-area";
+        const url = "/download?path=" + encodeURIComponent(it.path);
+        
+        if (isVideo) {
+          previewArea.innerHTML = `<video class="preview-media" controls preload="metadata" src="${url}"></video>`;
+        } else {
+          previewArea.innerHTML = `<img class="preview-media" src="${url}" />`;
+        }
+        row.appendChild(previewArea);
+      }
+    }
+
+    listEl.appendChild(row);
+  });
+}
+
+function openDir(path){ fetchList(path); }
+function go(path){ fetchList(path); }
+function downloadZip(path){ location.href = "/download_zip?path=" + encodeURIComponent(path); }
+
+fetchList("");
+</script>
+</body>
+</html>
