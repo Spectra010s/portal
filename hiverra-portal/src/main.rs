@@ -21,18 +21,25 @@ enum Commands {
     /// Receive a file
     Receive,
 }
+impl Commands {
+    // This is the method attached to the Enum
+    fn execute(&self) {
+        match self {
+          Commands::Send { file } => {
+            println!("Portal: Preparing to send '{}'...", file.display());
+          }
+          Commands::Receive => {
+            println!("Portal: Waiting for incoming files...");
+        }
+            
+        }
+    }
+}
 
 fn main() {
     // 3. Parse the user's input
     let cli = Cli::parse();
 
     // 4. Act on the input
-    match &cli.command {
-        Commands::Send { file } => {
-            println!("Portal: Preparing to send '{}'...", file.display());
-        }
-        Commands::Receive => {
-            println!("Portal: Waiting for incoming files...");
-        }
-    }
+    cli.command.execute();
 }
