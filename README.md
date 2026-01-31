@@ -53,6 +53,8 @@ Portal is a personal file-receiving app that allows users to securely upload and
 8. Files Inbox
    List, download, and view metadata of uploaded files.
 
+9. The Portal Quarantine Strategy
+
 ## Purpose
 
 Portal is designed to provide a simple, secure, and private alternative for sharing files without relying on third-party apps that compress or limit file quality. It’s ideal for personal use or small-scale sharing.

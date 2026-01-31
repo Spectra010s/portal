@@ -19,3 +19,9 @@ The implementation uses println! and the `.display()` method on PathBuf to provi
 
 ## Responsibility:
 To serve as the Brain of the operation. It handles the decision-making and ensures that the program behaves safely and predictably.
+
+## Future Safety: The Quarantine Principle
+To protect users from malicious files, the Portal "Receive" logic will implement a Quarantine Workflow:
+ * Staging: Files are initially written to a restricted temporary directory.
+ * Validation: The engine verifies that file metadata matches the actual content.
+ * Promotion: Files are only moved to the final user-facing directory after a "Clean" status is confirmed.
