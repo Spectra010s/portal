@@ -20,18 +20,21 @@ enum Commands {
     },
     /// Receive a file
     Receive,
-}
-impl Commands {
+}impl Commands {
     // This is the method attached to the Enum
     fn execute(&self) {
         match self {
-          Commands::Send { file } => {
-            println!("Portal: Preparing to send '{}'...", file.display());
-          }
-          Commands::Receive => {
-            println!("Portal: Waiting for incoming files...");
-        }
-            
+            Commands::Send { file } => {
+                // Check if the path exists before attempting to send
+                if file.exists() {
+                    println!("Portal: File found! Preparing to send '{}'...", file.display());
+                } else {
+                    println!("Error: The file '{}' does not exist.", file.display());
+                }
+            }
+            Commands::Receive => {
+                println!("Portal: Waiting for incoming files...");
+            }
         }
     }
 }
