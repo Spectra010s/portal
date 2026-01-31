@@ -1,6 +1,6 @@
 # Licensing
 
-`MIT License`
+[MIT License](https://github.com/Spectra010s/portal/blob/main/LICENSE)
 
 **Hiverra Portal** is currently licensed under the MIT License.
 
