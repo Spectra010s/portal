@@ -25,11 +25,17 @@ enum Commands {
     fn execute(&self) {
         match self {
             Commands::Send { file } => {
-                // Check if the path exists before attempting to send
-                if file.exists() {
-                    println!("Portal: File found! Preparing to send '{}'...", file.display());
+                // Check 1. check if the path exists before attempting to send
+                if !file.exists() {
+                    println!("Error: The file  '{}' does not exist.", file.display());
+                } else if file.is_dir() {
+               // Check 2: Is it a folder? 
+               // We don't want to "send" a folder yet because folders 
+               // need to be zipped or recursed.
+                    println!("Error: '{}' is a directory. Portal only supports single files right now.", file.display());
                 } else {
-                    println!("Error: The file '{}' does not exist.", file.display());
+                    // If it exists AND it's not a directory, it's a file!
+                    println!("Portal: File found! Preparing to send '{}'...", file.display());
                 }
             }
             Commands::Receive => {
