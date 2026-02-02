@@ -1,5 +1,9 @@
 use clap::Subcommand;
-use std::{fs::metadata, path::PathBuf};
+use std::{
+    fs::{File, metadata},
+    io::BufReader,
+    path::PathBuf,
+};
 
 // 2. Defining the Choices (The Enum)
 // 'pub' makes this visible to main.rs
@@ -35,12 +39,25 @@ impl Commands {
                     // Get the metadata (size, permissions, etc.)
                     let file_info = metadata(file).expect("Failed to read metadata");
                     let size = file_info.len(); // Size in bytes
+                    // Open the file for reading
+                    let Ok(file_handle) = File::open(file) else {
+                        println!(
+                            "Error: We found the file, but couldn't open it (it might be locked)."
+                        );
+                        return;
+                    };
 
+                    println!("Portal: File found!");
+
+                    println!("Portal: Connection established to the file system.");
                     println!(
-                        "Portal: File found!  Preparing to send '{}' ({} bytes)...",
+                        "Portal: Preparing to send '{}' ({} bytes)...",
                         file.display(),
                         size
                     );
+                    let mut reader = BufReader::new(file_handle);
+
+                    println!("Portal: Buffer initialized and ready for streaming.");
                 }
             }
             Commands::Receive => {
