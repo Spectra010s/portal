@@ -7,7 +7,7 @@ use commands::Commands; // Using the 'pub' enum and fn
 #[derive(Parser)]
 #[command(name = "portal")]
 #[command(about = "Hiverra Portal: High-speed file transfer")]
-#[command(version = "0.1.0")]
+#[command(version = "0.2.0")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
