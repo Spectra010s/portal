@@ -2,6 +2,8 @@ use clap::Parser;
 
 mod commands; // Links the commands file
 use commands::Commands; // Using the 'pub' enum and fn
+mod receiver;
+mod sender;
 
 // 1. Defining the Map (The Struct)
 #[derive(Parser)]
