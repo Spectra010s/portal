@@ -1,6 +1,9 @@
 use clap::Subcommand;
 use std::path::PathBuf;
 
+// Import anyhow to handle errors without crashing
+use anyhow::{Context, Result};
+
 use crate::receiver::receive_file;
 use crate::sender::send_file;
 
@@ -19,10 +22,18 @@ pub enum Commands {
 impl Commands {
     // This is the method attached to the Enum
     // pub is needed here also to be able to call the function
-    pub fn execute(&self) {
+    // We now return Result<()> to catch errors from sender/receiver
+    pub fn execute(&self) -> Result<()> {
         match self {
-            Commands::Send { file } => send_file(&file),
-            Commands::Receive => receive_file(),
+            Commands::Send { file } => {
+                // Pass the error up if sending fails
+                send_file(&file).context("Failed to execute Send command")?;
+            }
+            Commands::Receive => {
+                // Pass the error up if receiving fails
+                receive_file().context("Failed to execute Receive command")?;
+            }
         }
+        Ok(()) // Return success if no errors occurred
     }
 }
