@@ -14,6 +14,9 @@ pub enum Commands {
     /// Send a file
     Send {
         file: PathBuf, // changed it to PathBuf, so as to hold "File System Object".
+        /// The IP address of the receiver (e.g., 192.168.1.5)
+        #[arg(short, long)]
+        address: String,
     },
     /// Receive a file
     Receive,
@@ -25,9 +28,9 @@ impl Commands {
     // We now return Result<()> to catch errors from sender/receiver
     pub fn execute(&self) -> Result<()> {
         match self {
-            Commands::Send { file } => {
+            Commands::Send { file, address } => {
                 // Pass the error up if sending fails
-                send_file(&file).context("Failed to execute Send command")?;
+                send_file(&file, &address).context("Failed to execute Send command")?;
             }
             Commands::Receive => {
                 // Pass the error up if receiving fails
