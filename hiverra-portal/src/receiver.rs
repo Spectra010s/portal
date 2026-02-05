@@ -3,9 +3,10 @@ use std::{
     io::{Read, Write},
     net::TcpListener,
 };
-
 // Import anyhow for add descriptive error handling
+use crate::metadata::FileMetadata;
 use anyhow::{Context, Result};
+use bincode::deserialize;
 
 pub fn receive_file() -> Result<()> {
     println!("Portal: Initializing  systems...");
@@ -17,32 +18,41 @@ pub fn receive_file() -> Result<()> {
     println!("Portal: Connected to sender");
     println!("Portal: Waiting for incoming files...");
 
-    // 1. Read the name length (We sent a u32, which is 4 bytes)
-    let mut name_len_buf = [0u8; 4];
+    // 1. Read the metadata length
+    let mut metadata_len_buf = [0u8; 4];
     socket
-        .read_exact(&mut name_len_buf)
-        .context("Failed to read name length")?; // Read exactly 4 bytes
-    let name_len = u32::from_be_bytes(name_len_buf); // Turn bytes back into a number
+        .read_exact(&mut metadata_len_buf)
+        .context("Failed to read metadata length")?; // Read exactly 4 bytes
 
-    // 2. Read the actual name
-    let mut name_buf = vec![0u8; name_len as usize];
+    let metadata_len = u32::from_be_bytes(metadata_len_buf) as usize;
+
+    // 2. Read the Metadata Blob
+
+    let mut metadata_buf = vec![0u8; metadata_len];
     socket
-        .read_exact(&mut name_buf)
-        .context("Failed to read the filename from the stream")?;
-    let filename = String::from_utf8_lossy(&name_buf);
+        .read_exact(&mut metadata_buf)
+        .context("Failed to read metadata blob")?;
 
-    println!("Receiving file: {}", filename);
-    // 3. Read the file size (We sent a u64, which is 8 bytes)
+    // 3 Turn those bytes into our Struct
+    let file_info: FileMetadata =
+        deserialize(&metadata_buf).context("Failed to deserialize metadata")?;
 
-    let mut size_buf = [0u8; 8];
-    socket
-        .read_exact(&mut size_buf)
-        .context("Failed to read size")?;
-    let file_size = u64::from_be_bytes(size_buf);
+    // Read the name and size and ?description
+    let filename = &file_info.filename;
+    let file_size = file_info.file_size;
+    let description = &file_info.description;
+
+    println!("Receiving file: {} ({} bytes)", filename, file_size);
+
+    if let Some(desc) = description {
+        println!("Portal: Sender left a note: \"{}\"", desc);
+    } else {
+        println!("Portal: No description provided for this transfer.");
+    }
 
     // 4. Create the file on disk
-    // We use &*filename to tell Cow to act like a normal string
-    let mut out_file = File::create(&*filename).context("Failed to create file on disk")?;
+    // filename is now a &String, we dont need the &* anymore.
+    let mut out_file = File::create(filename).context("Failed to create file on disk")?;
 
     // 5. The loop to actually save the bytes
     let mut buffer = [0u8; 8192];
