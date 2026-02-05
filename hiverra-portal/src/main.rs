@@ -10,7 +10,7 @@ mod sender;
 #[derive(Parser)]
 #[command(name = "portal")]
 #[command(about = "Hiverra Portal: High-speed file transfer")]
-#[command(version = "0.2.0")]
+#[command(version = "0.3.0")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
