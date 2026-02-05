@@ -1,4 +1,5 @@
 use clap::Parser;
+use std::process::exit;
 
 mod commands; // Links the commands file
 use commands::Commands; // Using the 'pub' enum and fn
@@ -18,6 +19,15 @@ struct Cli {
 fn main() {
     // 3. Parse the user's input
     let cli = Cli::parse();
+
     // 4. Act on the input
-    cli.command.execute();
+    // Since execute() now returns a Result, we check if it's an Error (Err)
+    if let Err(e) = cli.command.execute() {
+        // eprint! prints to the 'Standard Error' stream instead of 'Standard Output'
+        // {:?} prints the error message plus all the .context() notes we added
+        eprintln!("Portal Error: {:#}", e);
+
+        // Exit with a non-zero code to tell the OS that the program failed
+        exit(1);
+    }
 }
