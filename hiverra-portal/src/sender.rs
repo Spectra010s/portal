@@ -30,7 +30,7 @@ fn create_metadata(file: &PathBuf, desc: Option<String>) -> anyhow::Result<FileM
     })
 }
 
-pub fn send_file(file: &PathBuf) -> Result<()> {
+pub fn send_file(file: &PathBuf, addr: &str) -> Result<()> {
     // Check 1. check if the path exists before attempting to send
     if !file.exists() {
         println!("Error: The file '{}' does not exist.", file.display());
@@ -98,9 +98,9 @@ pub fn send_file(file: &PathBuf) -> Result<()> {
         let mut reader = BufReader::new(file_handle);
 
         println!("Portal: Buffer initialized and ready for streaming.");
-
-        let mut stream =
-            TcpStream::connect("127.0.0.1:7878").context("Could not connect to Reciever!")?;
+        let r_addr = format!("{}:7878", addr);
+        println!("Portal: connecting to {}", r_addr);
+        let mut stream = TcpStream::connect(r_addr).context("Could not connect to Reciever!")?;
         println!("Sender: Connected to receiver!");
 
         // 3. Stream the Metadata to the Pipe

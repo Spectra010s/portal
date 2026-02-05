@@ -8,11 +8,49 @@ use crate::metadata::FileMetadata;
 use anyhow::{Context, Result};
 use bincode::deserialize;
 
+use network_interface::{NetworkInterface, NetworkInterfaceConfig};
+
+fn get_local_ip() -> Option<String> {
+    NetworkInterface::show()
+        .ok()?
+        .into_iter()
+        .flat_map(|itf| itf.addr)
+        .find(|addr| addr.ip().is_ipv4() && !addr.ip().is_loopback())
+        .map(|addr| addr.ip().to_string())
+}
+fn get_all_ips() -> Option<Vec<String>> {
+    let ips = NetworkInterface::show()
+        .ok()?
+        .into_iter()
+        .flat_map(|itf| itf.addr)
+        .filter(|addr| addr.ip().is_ipv4() && !addr.ip().is_loopback())
+        .map(|addr| addr.ip().to_string())
+        .collect();
+
+    Some(ips)
+}
+
 pub fn receive_file() -> Result<()> {
     println!("Portal: Initializing  systems...");
-    let listener = TcpListener::bind("127.0.0.1:7878").context("Failed to bind to port 7878")?;
+    println!("Portal: Getting available IP addresses:");
+    let ips = get_all_ips().context("Could not retrieve any network interfaces")?;
+
+    for ip in ips {
+        println!("  -> {}", ip);
+    }
+
+    let my_ip = get_local_ip().context("Failed to get IP address, pls try again")?;
+
+    let listener = TcpListener::bind("0.0.0.0:7878").context("Failed to bind to port 7878")?;
+
+    println!("Portal: crearing wormhole at {:?}", my_ip);
+    println!(
+        "Portal: on the sender machine, run: portal send <file> -a {}",
+        my_ip
+    );
 
     println!("Receiver: Portal open. Waiting for a connection on port 7878...");
+
     let (mut socket, addr) = listener.accept().context("Failed to accept connection")?;
     println!("Receiver: Connection established with {}!", addr);
     println!("Portal: Connected to sender");
