@@ -98,7 +98,7 @@
                     <Component Id='License' Guid='*'>
                         <File Id='LicenseFile'
                             DiskId='1'
-                            Source='..\LICENSE'
+                            Source='wix\License.rtf'
                             KeyPath='yes'/>
                     </Component>
                     
