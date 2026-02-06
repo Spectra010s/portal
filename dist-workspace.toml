@@ -1,5 +1,5 @@
 [workspace]
-members = ["cargo:."]
+members = ["cargo:./hiverra-portal"]
 
 # Config for 'dist'
 [dist]
