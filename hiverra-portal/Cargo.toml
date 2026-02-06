@@ -1,8 +1,25 @@
 [package]
-name = "portal"
-version = "0.3.0"
-authors = ["Spectra010s"]
+name = "hiverra-portal"
+version = "0.4.0-beta"
+authors = ["Spectra010s <spectra010s@gmail.com"]
 edition = "2024"
+repository = "https://github.com/Spectra010s/portal" 
+description = "Portal is a lightweight, cross-platform CLI tool built in Rust for sending files and folders between devices instantly."
+homepage = "https://github.com/Spectra010s/portal"
+license = "MIT"
+
+
+[package.metadata.wix]
+product-name = "Hiverra Portal"
+upgrade-guid = "03150A4A-93A4-4E03-BEF5-5D53BBF4A7C7"
+path-guid = "BD7DEF88-AE13-482C-B366-DA87D1DCAEF1"
+license = true
+license-file = "../LICENSE"
+eula = false
+
+[[bin]]
+name = "portal"
+path ="src/main.rs"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
@@ -10,3 +27,8 @@ anyhow = "1.0"
 serde = { version = "1.0.228", features = ["derive"] }
 bincode = "1.3.3"
 network-interface = "2.0.5"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
