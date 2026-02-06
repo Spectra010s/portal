@@ -10,8 +10,8 @@ mod sender;
 // 1. Defining the Map (The Struct)
 #[derive(Parser)]
 #[command(name = "portal")]
-#[command(about = "Hiverra Portal: High-speed file transfer")]
-#[command(version = "0.3.0")]
+#[command(about = "Hiverra Portal: A lightweight CLI tool to transfer files between devices.")]
+#[command(version)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
