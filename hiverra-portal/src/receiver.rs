@@ -7,37 +7,27 @@ use std::{
 use crate::metadata::FileMetadata;
 use anyhow::{Context, Result};
 use bincode::deserialize;
-
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 
 fn get_local_ip() -> Option<String> {
     NetworkInterface::show()
         .ok()?
         .into_iter()
-        .flat_map(|itf| itf.addr)
-        .find(|addr| addr.ip().is_ipv4() && !addr.ip().is_loopback())
-        .map(|addr| addr.ip().to_string())
-}
-fn get_all_ips() -> Option<Vec<String>> {
-    let ips = NetworkInterface::show()
-        .ok()?
-        .into_iter()
-        .flat_map(|itf| itf.addr)
-        .filter(|addr| addr.ip().is_ipv4() && !addr.ip().is_loopback())
-        .map(|addr| addr.ip().to_string())
-        .collect();
-
-    Some(ips)
+        .find(|itf| {
+            let name = itf.name.to_lowercase();
+            name.contains("wlan") || name.contains("eth") || name.contains("en")
+        })
+        .and_then(|itf| {
+            itf.addr
+                .into_iter()
+                .find(|addr| addr.ip().is_ipv4() && !addr.ip().is_loopback())
+                .map(|addr| addr.ip().to_string())
+        })
 }
 
 pub fn receive_file() -> Result<()> {
     println!("Portal: Initializing  systems...");
-    println!("Portal: Getting available IP addresses:");
-    let ips = get_all_ips().context("Could not retrieve any network interfaces")?;
-
-    for ip in ips {
-        println!("  -> {}", ip);
-    }
+    println!("Portal: Getting IP address");
 
     let my_ip = get_local_ip().context("Failed to get IP address, pls try again")?;
 
