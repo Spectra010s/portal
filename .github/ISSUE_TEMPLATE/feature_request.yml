@@ -1,0 +1,29 @@
+name: Feature Request
+description: Suggest an idea for the portal CLI
+title: '[FEATURE]: '
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Describe the feature
+      placeholder: "I wish portal could..."
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Why is this needed?
+      placeholder: Describe the use case or the problem this solves.
+  - type: textarea
+    id: pitch
+    attributes:
+      label: Proposed Syntax/UX
+      placeholder: "e.g., portal --new-flag or portal sub-command"
+      render: shell
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contribution
+      options:
+        - label: I am interested in fixing this myself (I'll wait for a maintainer to approve the design).
