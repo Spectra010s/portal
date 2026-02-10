@@ -1,5 +1,6 @@
 name: Bug Report
 description: Report a problem with the portal CLI
+title: 'Bug: '
 labels: ["bug", "triage"]
 body:
   - type: markdown
