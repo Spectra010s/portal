@@ -103,23 +103,35 @@ jobs:
         run: gh release upload ${{ github.ref_name }} dist/hiverra-portal-aarch64-linux-android.tar.gz* dist/portal-android-install.sh --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+          
+          
       - name: Edit Release Body
         run: |
+          # 1. Download the current body
           gh release view ${{ github.ref_name }} --json body --jq '.body' > body.md
 
-          # 1. Inject the Install Section under the standard shell script installer
-          sed -i '/hiverra-portal-installer.sh | sh/a \
-\
-### Install prebuilt binaries via shell script (Android/Termux)\
-\
-```sh\
-curl -lsSf [https://github.com/Spectra010s/portal/releases/download/$](https://github.com/Spectra010s/portal/releases/download/$){{ github.ref_name }}/portal-android-install.sh | sh\
-```' body.md
+          # 2. Create the snippet to inject (Shell Section)
+          cat > android_sh.txt <<EOF
 
-          # 2. Inject the row into the Download Table
-          sed -i '/unknown-linux-gnu.tar.xz/a | [hiverra-portal-aarch64-linux-android.tar.gz](https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/hiverra-portal-aarch64-linux-android.tar.gz) | Android (Termux) | [checksum](https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/hiverra-portal-aarch64-linux-android.tar.gz.sha256) |' body.md
+          ### Install prebuilt binaries via shell script (Android/Termux)
 
+          \`\`\`sh
+          curl -lsSf https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/portal-android-install.sh | sh
+          \`\`\`
+          EOF
+
+          # 3. Create the table row
+          ANDROID_ROW="| [hiverra-portal-aarch64-linux-android.tar.gz](https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/hiverra-portal-aarch64-linux-android.tar.gz) | Android (Termux) | [checksum](https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/hiverra-portal-aarch64-linux-android.tar.gz.sha256) |"
+
+          # 4. Use sed to inject. We use 'r' to read the file and a different delimiter to avoid slash errors.
+          # Inject instructions after the main installer line
+          sed -i "/hiverra-portal-installer.sh | sh/r android_sh.txt" body.md
+          
+          # Inject table row after the linux-gnu line
+          sed -i "/unknown-linux-gnu.tar.xz/a $ANDROID_ROW" body.md
+
+          # 5. Push the update
           gh release edit ${{ github.ref_name }} --notes-file body.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
