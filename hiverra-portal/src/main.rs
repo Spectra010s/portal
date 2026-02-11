@@ -6,7 +6,7 @@ use commands::Commands; // Using the 'pub' enum and fn
 mod metadata;
 mod receiver;
 mod sender;
-
+mod update;
 // 1. Defining the Map (The Struct)
 #[derive(Parser)]
 #[command(name = "portal")]
@@ -17,13 +17,14 @@ struct Cli {
     command: Commands,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // 3. Parse the user's input
     let cli = Cli::parse();
 
     // 4. Act on the input
     // Since execute() now returns a Result, we check if it's an Error (Err)
-    if let Err(e) = cli.command.execute() {
+    if let Err(e) = cli.command.execute().await {
         // eprint! prints to the 'Standard Error' stream instead of 'Standard Output'
         // {:?} prints the error message plus all the .context() notes we added
         eprintln!("Portal Error: {:#}", e);
