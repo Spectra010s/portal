@@ -117,12 +117,12 @@ jobs:
           if ! grep -q "Android/Termux" body.md; then
             cat > android_sh.txt <<EOF
 
-### Install prebuilt binaries via shell script (Android/Termux)
-
-\`\`\`sh
-curl -sSfL https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/hiverra-portal-android-installer.sh | sh
-\`\`\`
-EOF
+            ### Install prebuilt binaries via shell script (Android/Termux)
+            
+            \`\`\`sh
+            curl -sSfL https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/hiverra-portal-android-installer.sh | sh
+            \`\`\`
+            EOF
             sed -i "/### Install prebuilt binaries via powershell script/r android_sh.txt" body.md
           fi
 
