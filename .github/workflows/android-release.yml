@@ -27,7 +27,7 @@ jobs:
         run: cargo install cargo-ndk
 
       - name: Build Android Binary
-        run: cargo ndk -t aarch64-linux-android --platform 21 build --release
+        run: cargo ndk -t aarch64-linux-android --platform 28 build --release
 
       - name: Create Tarball & Checksum
         run: |
