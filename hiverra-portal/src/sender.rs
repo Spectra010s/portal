@@ -1,22 +1,16 @@
+use inquire::{Confirm, Text};
+use std::path::PathBuf;
 use tokio::{
     fs::{File, metadata},
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, stdin, stdout},
+    io::{AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpStream,
 };
-
-use std::path::PathBuf;
 // Import anyhow for add descriptive error handling
 use crate::metadata::FileMetadata;
 use anyhow::{Context, Result};
 use bincode::serialize;
 
-enum DescChoice {
-    Yes,
-    No,
-    Default,
-}
-
-async fn create_metadata(file: &PathBuf, desc: Option<String>) -> anyhow::Result<FileMetadata> {
+async fn create_metadata(file: &PathBuf, desc: Option<String>) -> Result<FileMetadata> {
     let attr = metadata(file).await?;
     let name = file
         .file_name()
@@ -31,7 +25,7 @@ async fn create_metadata(file: &PathBuf, desc: Option<String>) -> anyhow::Result
     })
 }
 
-pub async fn send_file(file: &PathBuf, addr: &str) -> Result<()> {
+pub async fn send_file(file: &PathBuf, addr: &Option<String>) -> Result<()> {
     // Check 1. check if the path exists before attempting to send
     if !file.exists() {
         println!("Error: The file '{}' does not exist.", file.display());
@@ -47,37 +41,32 @@ pub async fn send_file(file: &PathBuf, addr: &str) -> Result<()> {
         return Ok(());
     } else {
         // If it exists AND it's not a directory, it's a file!
-        // Get the metadata (size, permissions, etc.)
-        // .context() replaces .expect() to provide better error messages without crashing
         println!("Portal: File found!");
-        // 1. Ask if user wants to add a description first
-        print!("Portal: Add description? (y/N):");
-        stdout().flush().await.context("Failed to flush stdout")?;
 
-        let mut stdin_reader = BufReader::new(stdin());
-
-        let mut y_n_input = String::new();
-        stdin_reader.read_line(&mut y_n_input).await?;
-
-        let choice = match y_n_input.trim().to_lowercase().as_str() {
-            "y" | "yes" => DescChoice::Yes,
-            "n" | "no" => DescChoice::No,
-            _ => DescChoice::Default,
+        // Ask user for reciver addrress
+        let re_addr = match addr {
+            Some(address) => address.clone(),
+            None => Text::new("Portal: Enter Recieiver's address:")
+                .prompt()
+                .context("Failed to get address")?,
         };
 
-        let user_desc = match choice {
-            DescChoice::Yes => {
-                print!("Portal: Enter a description for '{}': ", file.display());
-                stdout().flush().await.context("Failed to flush stdout")?;
+        // 2. Ask if user wants to add a description first
 
-                let mut desc_input = String::new();
-                stdin_reader.read_line(&mut desc_input).await?;
+        let user_desc = if Confirm::new("Portal: Add description?")
+            .with_default(false)
+            .prompt()?
+        {
+            let desc_msg = format!("Portal: Enter a description for '{}': ", file.display());
 
-                Some(desc_input.trim().to_string())
-            }
-            _ => None,
+            let desc_input = Text::new(&desc_msg).prompt()?;
+
+            Some(desc_input)
+        } else {
+            None
         };
 
+        // Get the metadata (size, permissions, etc.)
         // creating metadata with description
         let file_info = create_metadata(file, user_desc)
             .await
@@ -104,7 +93,7 @@ pub async fn send_file(file: &PathBuf, addr: &str) -> Result<()> {
         let mut reader = BufReader::new(file_handle);
 
         println!("Portal: Buffer initialized and ready for streaming.");
-        let r_addr = format!("{}:7878", addr);
+        let r_addr = format!("{}:7878", re_addr);
         println!("Portal: connecting to {}", r_addr);
         let mut stream = TcpStream::connect(r_addr)
             .await

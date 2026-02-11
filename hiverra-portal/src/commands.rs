@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 
 use crate::receiver::receive_file;
+use crate::select::select_file_to_send;
 use crate::sender::send_file;
 use crate::update::update_portal;
 
@@ -14,10 +15,11 @@ use crate::update::update_portal;
 pub enum Commands {
     /// Send a file
     Send {
-        file: PathBuf, // changed it to PathBuf, so as to hold "File System Object".
+        // The file to send (optional, will prompt if omitted)
+        file: Option<PathBuf>, // changed it to PathBuf, so as to hold "File System Object".
         /// The IP address of the receiver (e.g., 192.168.1.5)
         #[arg(short, long)]
-        address: String,
+        address: Option<String>,
     },
     /// Receive a file
     Receive,
@@ -32,8 +34,19 @@ impl Commands {
     pub async fn execute(&self) -> Result<()> {
         match self {
             Commands::Send { file, address } => {
-                // Pass the error up if sending fails
-                send_file(&file, &address)
+                // Determine which path to use
+                let path_to_send = match file {
+                    Some(path) => path.clone(),
+                    None => {
+                        if let Ok(Some(selected)) = select_file_to_send().await {
+                            PathBuf::from(selected)
+                        } else {
+                            return Ok(());
+                        }
+                    }
+                };
+
+                send_file(&path_to_send, &address)
                     .await
                     .context("Failed to execute Send command")?;
             }
