@@ -1,25 +1,22 @@
 use anyhow::{Context, Error, Result};
 use self_update::{
-   backends::github::Update,
-    cargo_crate_version, 
-    update::Release,
-    version::bump_is_greater,
+    backends::github::Update, cargo_crate_version, update::Release, version::bump_is_greater,
 };
+use tokio::task::spawn_blocking;
+use std::process::exit;
+use inquire::Confirm;
 
 // Only import these when compiling for Windows
 #[cfg(target_os = "windows")]
-use self_update::Download;
-#[cfg(target_os = "windows")]
-use std::{
-    env::temp_dir,
-    fs::File,
-    process::{Command, exit},
+use {
+    anyhow::anyhow,
+    self_update::Download,
+    std::{
+        env::temp_dir,
+        fs::File,
+        process::{Command, exit},
+    },
 };
-
-use tokio::task::spawn_blocking;
-
-use inquire::Confirm;
-
 
 pub async fn update_portal() -> Result<()> {
     // 1. Fetch the latest release
@@ -82,14 +79,10 @@ pub async fn update_portal() -> Result<()> {
                         .arg("/passive")
                         .spawn()
                         .context("Failed to launch MSI")?;
-
-                    
-                    
                     Ok(())
                 })
                 .await
                 .context("Portal: Windows update failed")??;
-                exit(0);
             }
 
             #[cfg(not(target_os = "windows"))]
@@ -112,6 +105,7 @@ pub async fn update_portal() -> Result<()> {
                 .context("Downloading failed")??;
             }
             println!("Portal: Update successful!");
+            exit(0);
         } else {
             println!("Portal: Update cancelled.");
         }
