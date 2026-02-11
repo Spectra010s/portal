@@ -23,16 +23,11 @@ jobs:
         with:
           targets: aarch64-linux-android
 
-      - name: Install Android NDK
-        run: |
-          echo "y" | sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
-          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/25.2.9519653" >> $GITHUB_ENV
-
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
 
       - name: Build Android Binary
-        run: cargo ndk -t aarch64-linux-android -p 21 build --release
+        run: cargo ndk -t aarch64-linux-android --platform 21 build --release
 
       - name: Create Tarball & Checksum
         run: |
