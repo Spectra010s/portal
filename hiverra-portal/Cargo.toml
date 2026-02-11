@@ -1,13 +1,12 @@
 [package]
 name = "hiverra-portal"
-version = "0.5.0-alpha"
+version = "0.5.1-alpha"
 authors = ["Spectra010s <spectra010s@gmail.com"]
 edition = "2024"
 repository = "https://github.com/Spectra010s/portal" 
 description = "Portal is a lightweight, cross-platform CLI tool built in Rust for sending files and folders between devices instantly."
 homepage = "https://github.com/Spectra010s/portal"
 license = "MIT"
-
 
 [package.metadata.wix]
 product-name = "Hiverra Portal"

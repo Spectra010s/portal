@@ -1,19 +1,25 @@
-use anyhow::{Context, Error, Result, anyhow};
+use anyhow::{Context, Error, Result};
 use self_update::{
-    Download, backends::github::Update,
+   backends::github::Update,
     cargo_crate_version, 
     update::Release,
     version::bump_is_greater,
 };
 
-use tokio::task::spawn_blocking;
-
-use inquire::Confirm;
+// Only import these when compiling for Windows
+#[cfg(target_os = "windows")]
+use self_update::Download;
+#[cfg(target_os = "windows")]
 use std::{
     env::temp_dir,
     fs::File,
     process::{Command, exit},
 };
+
+use tokio::task::spawn_blocking;
+
+use inquire::Confirm;
+
 
 pub async fn update_portal() -> Result<()> {
     // 1. Fetch the latest release
@@ -52,7 +58,7 @@ pub async fn update_portal() -> Result<()> {
             {
                 println!("Portal: Downloading Windows Installer (MSI)...");
                 // On Windows, we download the MSI and let msiexec take over
-                spawn_blocking(move || {
+                spawn_blocking(move || -> Result<()> {
                     let tmp_dir = temp_dir();
                     let dest_path = tmp_dir.join("portal_update.msi");
 
@@ -77,16 +83,19 @@ pub async fn update_portal() -> Result<()> {
                         .spawn()
                         .context("Failed to launch MSI")?;
 
-                    exit(0);
+                    
+                    
+                    Ok(())
                 })
                 .await
                 .context("Portal: Windows update failed")??;
+                exit(0);
             }
 
             #[cfg(not(target_os = "windows"))]
             {
                 // 3. Perform the update
-                spawn_blocking(move || {
+                spawn_blocking(move || -> Result<()> {
                     Update::configure()
                         .repo_owner("Spectra010s")
                         .repo_name("portal")
@@ -97,7 +106,7 @@ pub async fn update_portal() -> Result<()> {
                         .update()
                         .context("Failed to apply update")?;
 
-                    Ok::<(), Error>(())
+                    Ok(())
                 })
                 .await
                 .context("Downloading failed")??;
