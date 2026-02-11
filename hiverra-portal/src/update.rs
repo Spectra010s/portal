@@ -1,21 +1,17 @@
 use anyhow::{Context, Error, Result};
+use inquire::Confirm;
 use self_update::{
     backends::github::Update, cargo_crate_version, update::Release, version::bump_is_greater,
 };
-use tokio::task::spawn_blocking;
 use std::process::exit;
-use inquire::Confirm;
+use tokio::task::spawn_blocking;
 
 // Only import these when compiling for Windows
 #[cfg(target_os = "windows")]
 use {
     anyhow::anyhow,
     self_update::Download,
-    std::{
-        env::temp_dir,
-        fs::File,
-        process::{Command, exit},
-    },
+    std::{env::temp_dir, fs::File, process::Command},
 };
 
 pub async fn update_portal() -> Result<()> {
@@ -60,7 +56,7 @@ pub async fn update_portal() -> Result<()> {
                     let dest_path = tmp_dir.join("portal_update.msi");
 
                     // Manual download of the MSI asset
-                    let mut source = Download::from_url(
+                    let source = Download::from_url(
                         &release
                             .asset_for("windows", Some("msi"))
                             .ok_or_else(|| anyhow!("Could not find MSI for Windows"))?
