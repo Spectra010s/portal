@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 
 use crate::receiver::receive_file;
 use crate::sender::send_file;
+use crate::update::update_portal;
 
 // 2. Defining the Choices (The Enum)
 // 'pub' makes this visible to main.rs
@@ -20,21 +21,32 @@ pub enum Commands {
     },
     /// Receive a file
     Receive,
+    /// Update portal to latest version
+    Update,
 }
 
 impl Commands {
     // This is the method attached to the Enum
     // pub is needed here also to be able to call the function
     // We now return Result<()> to catch errors from sender/receiver
-    pub fn execute(&self) -> Result<()> {
+    pub async fn execute(&self) -> Result<()> {
         match self {
             Commands::Send { file, address } => {
                 // Pass the error up if sending fails
-                send_file(&file, &address).context("Failed to execute Send command")?;
+                send_file(&file, &address)
+                    .await
+                    .context("Failed to execute Send command")?;
             }
             Commands::Receive => {
                 // Pass the error up if receiving fails
-                receive_file().context("Failed to execute Receive command")?;
+                receive_file()
+                    .await
+                    .context("Failed to execute Receive command")?;
+            }
+            Commands::Update => {
+                update_portal()
+                    .await
+                    .context("Failed to execute Update commamd")?;
             }
         }
         Ok(()) // Return success if no errors occurred
