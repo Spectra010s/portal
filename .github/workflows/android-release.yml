@@ -10,6 +10,9 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hiverra-portal
     steps:
       - uses: actions/checkout@v4
         with:
@@ -56,12 +59,10 @@ jobs:
           URL="https://github.com/\$REPO/releases/download/\$TAG/\$BINARY_NAME"
           
           echo "Installing portal (\$TAG) for Android..."
-
-          for cmd in curl tar sha256sum; do
-              if ! command -v \$cmd >/dev/null 2>&1; then
-                  pkg install -y \$cmd
-              fi
-          done
+          
+           
+          pkg install -y curl tar coreutils
+          
 
           TMP_DIR=\$(mktemp -d)
           FILE="\$TMP_DIR/package.tar.gz"
