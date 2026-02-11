@@ -5,8 +5,10 @@ mod commands; // Links the commands file
 use commands::Commands; // Using the 'pub' enum and fn
 mod metadata;
 mod receiver;
+mod select;
 mod sender;
 mod update;
+
 // 1. Defining the Map (The Struct)
 #[derive(Parser)]
 #[command(name = "portal")]
