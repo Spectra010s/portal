@@ -27,6 +27,9 @@ jobs:
         run: cargo install cargo-ndk
 
       - name: Build Android Binary
+        env:
+          OPENSSL_STATIC: 1
+          OPENSSL_VENDORED: 1
         run: cargo ndk -t aarch64-linux-android --platform 21 build --release
 
       - name: Create Tarball & Checksum
