@@ -32,12 +32,10 @@ jobs:
       - name: Create Tarball & Checksum
         run: |
           mkdir -p dist/bundle
-          # Copy the binary, keep name as 'portal' for internal use
           cp target/aarch64-linux-android/release/portal dist/bundle/portal
           cp README.md LICENSE* dist/bundle/ || true
           
           cd dist
-          # Name the tarball to match the 'hiverra-portal' convention
           TAR_NAME="hiverra-portal-aarch64-linux-android.tar.gz"
           tar -cvzf "$TAR_NAME" -C bundle .
           sha256sum "$TAR_NAME" > "$TAR_NAME.sha256"
@@ -45,7 +43,7 @@ jobs:
 
       - name: Generate Installer Script
         run: |
-          cat > dist/portal-android-install.sh <<EOF
+          cat > dist/hiverra-portal-android-installer.sh <<EOF
           #!/bin/sh
           set -e
           REPO="Spectra010s/portal"
@@ -54,14 +52,26 @@ jobs:
           URL="https://github.com/\$REPO/releases/download/\$TAG/\$BINARY_NAME"
           
           echo "Installing portal (\$TAG) for Android..."
-          
-           
-          pkg install -y curl tar coreutils
-          
 
-          TMP_DIR=\$(mktemp -d)
-          FILE="\$TMP_DIR/package.tar.gz"
+          # Check required tools before installing
+          for cmd in curl tar sha256sum; do
+              if ! command -v \$cmd >/dev/null 2>&1; then
+                  echo "\$cmd not found. Installing..."
+                  case "\$cmd" in
+                      sha256sum)
+                          pkg install -y coreutils
+                          ;;
+                      *)
+                          pkg install -y "\$cmd"
+                          ;;
+                  esac
+              fi
+          done
+          
+          TMP_DIR=$(mktemp -d "$PREFIX/tmp/portal.XXXXXX")
+          FILE="\$TMP_DIR/hiverra-portal.tar.gz"
 
+          echo "Downloading..."
           curl -sSfL "\$URL" -o "\$FILE"
 
           echo "Verifying checksum..."
@@ -96,38 +106,32 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Everything
-        run: gh release upload ${{ github.ref_name }} dist/hiverra-portal-aarch64-linux-android.tar.gz* dist/portal-android-install.sh --clobber
+        run: gh release upload ${{ github.ref_name }} dist/hiverra-portal-aarch64-linux-android.tar.gz* dist/hiverra-portal-android-installer.sh --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
           
       - name: Edit Release Body
         run: |
-          # 1. Download the current body
           gh release view ${{ github.ref_name }} --json body --jq '.body' > body.md
 
-          # 2. Create the snippet to inject (Shell Section)
-          cat > android_sh.txt <<EOF
+          if ! grep -q "Android/Termux" body.md; then
+            cat > android_sh.txt <<EOF
 
-          ### Install prebuilt binaries via shell script (Android/Termux)
+### Install prebuilt binaries via shell script (Android/Termux)
 
-          \`\`\`sh
-          curl -lsSf https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/portal-android-install.sh | sh
-          \`\`\`
-          EOF
+\`\`\`sh
+curl -sSfL https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/hiverra-portal-android-installer.sh | sh
+\`\`\`
+EOF
+            sed -i "/### Install prebuilt binaries via powershell script/r android_sh.txt" body.md
+          fi
 
-          # 3. Create the table row
           ANDROID_ROW="| [hiverra-portal-aarch64-linux-android.tar.gz](https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/hiverra-portal-aarch64-linux-android.tar.gz) | Android (Termux) | [checksum](https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/hiverra-portal-aarch64-linux-android.tar.gz.sha256) |"
 
-          # 4. Use sed to inject. We use 'r' to read the file and a different delimiter to avoid slash errors.
-          # Inject instructions after the main installer line
-          sed -i "/hiverra-portal-installer.sh | sh/r android_sh.txt" body.md
-          
-          # Inject table row after the linux-gnu line
-          sed -i "/unknown-linux-gnu.tar.xz/a $ANDROID_ROW" body.md
+          if ! grep -q "aarch64-linux-android.tar.gz" body.md; then
+            sed -i "/unknown-linux-gnu.tar.xz/a $ANDROID_ROW" body.md
+          fi
 
-          # 5. Push the update
           gh release edit ${{ github.ref_name }} --notes-file body.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
