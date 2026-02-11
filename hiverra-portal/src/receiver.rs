@@ -1,6 +1,6 @@
-use std::{
+use tokio::{
     fs::File,
-    io::{Read, Write},
+    io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
 };
 // Import anyhow for add descriptive error handling
@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use bincode::deserialize;
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 
-fn get_local_ip() -> Option<String> {
+async fn get_local_ip() -> Option<String> {
     NetworkInterface::show()
         .ok()?
         .into_iter()
@@ -25,13 +25,17 @@ fn get_local_ip() -> Option<String> {
         })
 }
 
-pub fn receive_file() -> Result<()> {
+pub async fn receive_file() -> Result<()> {
     println!("Portal: Initializing  systems...");
     println!("Portal: Getting IP address");
 
-    let my_ip = get_local_ip().context("Failed to get IP address, pls try again")?;
+    let my_ip = get_local_ip()
+        .await
+        .context("Failed to get IP address, pls try again")?;
 
-    let listener = TcpListener::bind("0.0.0.0:7878").context("Failed to bind to port 7878")?;
+    let listener = TcpListener::bind("0.0.0.0:7878")
+        .await
+        .context("Failed to bind to port 7878")?;
 
     println!("Portal: crearing wormhole at {:?}", my_ip);
     println!(
@@ -41,7 +45,10 @@ pub fn receive_file() -> Result<()> {
 
     println!("Receiver: Portal open. Waiting for a connection on port 7878...");
 
-    let (mut socket, addr) = listener.accept().context("Failed to accept connection")?;
+    let (mut socket, addr) = listener
+        .accept()
+        .await
+        .context("Failed to accept connection")?;
     println!("Receiver: Connection established with {}!", addr);
     println!("Portal: Connected to sender");
     println!("Portal: Waiting for incoming files...");
@@ -50,6 +57,7 @@ pub fn receive_file() -> Result<()> {
     let mut metadata_len_buf = [0u8; 4];
     socket
         .read_exact(&mut metadata_len_buf)
+        .await
         .context("Failed to read metadata length")?; // Read exactly 4 bytes
 
     let metadata_len = u32::from_be_bytes(metadata_len_buf) as usize;
@@ -59,6 +67,7 @@ pub fn receive_file() -> Result<()> {
     let mut metadata_buf = vec![0u8; metadata_len];
     socket
         .read_exact(&mut metadata_buf)
+        .await
         .context("Failed to read metadata blob")?;
 
     // 3 Turn those bytes into our Struct
@@ -80,7 +89,9 @@ pub fn receive_file() -> Result<()> {
 
     // 4. Create the file on disk
     // filename is now a &String, we dont need the &* anymore.
-    let mut out_file = File::create(filename).context("Failed to create file on disk")?;
+    let mut out_file = File::create(filename)
+        .await
+        .context("Failed to create file on disk")?;
 
     // 5. The loop to actually save the bytes
     let mut buffer = [0u8; 8192];
@@ -89,6 +100,7 @@ pub fn receive_file() -> Result<()> {
     while received_so_far < file_size {
         let bytes_read = socket
             .read(&mut buffer)
+            .await
             .context("Network read error during file transfer")?;
         if bytes_read == 0 {
             break;
@@ -96,6 +108,7 @@ pub fn receive_file() -> Result<()> {
 
         out_file
             .write_all(&buffer[..bytes_read])
+            .await
             .context("Disk write error")?;
         received_so_far += bytes_read as u64;
     }

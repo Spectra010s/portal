@@ -1,9 +1,10 @@
-use std::{
+use tokio::{
     fs::{File, metadata},
-    io::{BufReader, Read, Write, stdin, stdout},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, stdin, stdout},
     net::TcpStream,
-    path::PathBuf,
 };
+
+use std::path::PathBuf;
 // Import anyhow for add descriptive error handling
 use crate::metadata::FileMetadata;
 use anyhow::{Context, Result};
@@ -15,8 +16,8 @@ enum DescChoice {
     Default,
 }
 
-fn create_metadata(file: &PathBuf, desc: Option<String>) -> anyhow::Result<FileMetadata> {
-    let attr = metadata(file)?;
+async fn create_metadata(file: &PathBuf, desc: Option<String>) -> anyhow::Result<FileMetadata> {
+    let attr = metadata(file).await?;
     let name = file
         .file_name()
         .and_then(|n| n.to_str())
@@ -30,7 +31,7 @@ fn create_metadata(file: &PathBuf, desc: Option<String>) -> anyhow::Result<FileM
     })
 }
 
-pub fn send_file(file: &PathBuf, addr: &str) -> Result<()> {
+pub async fn send_file(file: &PathBuf, addr: &str) -> Result<()> {
     // Check 1. check if the path exists before attempting to send
     if !file.exists() {
         println!("Error: The file '{}' does not exist.", file.display());
@@ -51,10 +52,12 @@ pub fn send_file(file: &PathBuf, addr: &str) -> Result<()> {
         println!("Portal: File found!");
         // 1. Ask if user wants to add a description first
         print!("Portal: Add description? (y/N):");
-        stdout().flush().context("Failed to flush stdout")?;
+        stdout().flush().await.context("Failed to flush stdout")?;
+
+        let mut stdin_reader = BufReader::new(stdin());
 
         let mut y_n_input = String::new();
-        stdin().read_line(&mut y_n_input)?;
+        stdin_reader.read_line(&mut y_n_input).await?;
 
         let choice = match y_n_input.trim().to_lowercase().as_str() {
             "y" | "yes" => DescChoice::Yes,
@@ -65,10 +68,10 @@ pub fn send_file(file: &PathBuf, addr: &str) -> Result<()> {
         let user_desc = match choice {
             DescChoice::Yes => {
                 print!("Portal: Enter a description for '{}': ", file.display());
-                stdout().flush().context("Failed to flush stdout")?;
+                stdout().flush().await.context("Failed to flush stdout")?;
 
                 let mut desc_input = String::new();
-                stdin().read_line(&mut desc_input)?;
+                stdin_reader.read_line(&mut desc_input).await?;
 
                 Some(desc_input.trim().to_string())
             }
@@ -76,7 +79,9 @@ pub fn send_file(file: &PathBuf, addr: &str) -> Result<()> {
         };
 
         // creating metadata with description
-        let file_info = create_metadata(file, user_desc).context("Failed to read metadata")?;
+        let file_info = create_metadata(file, user_desc)
+            .await
+            .context("Failed to read metadata")?;
 
         let encoded_metadata = serialize(&file_info).context("Failed to serialize metadata")?;
 
@@ -85,6 +90,7 @@ pub fn send_file(file: &PathBuf, addr: &str) -> Result<()> {
         // Size in bytes
         // Open the file for reading
         let file_handle = File::open(file)
+            .await
             .context("We found the file, but couldn't open it (it might be locked).")?;
 
         println!("Portal: Connection established to the file system.");
@@ -100,27 +106,35 @@ pub fn send_file(file: &PathBuf, addr: &str) -> Result<()> {
         println!("Portal: Buffer initialized and ready for streaming.");
         let r_addr = format!("{}:7878", addr);
         println!("Portal: connecting to {}", r_addr);
-        let mut stream = TcpStream::connect(r_addr).context("Could not connect to Reciever!")?;
+        let mut stream = TcpStream::connect(r_addr)
+            .await
+            .context("Could not connect to Reciever!")?;
         println!("Sender: Connected to receiver!");
 
         // 3. Stream the Metadata to the Pipe
         stream
             .write_all(&metadata_len.to_be_bytes())
+            .await
             .context("Failed to send metadata length")?;
         stream
             .write_all(&encoded_metadata)
+            .await
             .context("Failed to send metadata")?;
         let mut buffer = [0u8; 8192];
 
         // 4. NOW start the File Loop we discussed
         println!("Portal: Sending {}...", file_info.filename);
         loop {
-            let bytes_read = reader.read(&mut buffer).context("Failed to read file")?;
+            let bytes_read = reader
+                .read(&mut buffer)
+                .await
+                .context("Failed to read file")?;
             if bytes_read == 0 {
                 break;
             }
             stream
                 .write_all(&buffer[..bytes_read])
+                .await
                 .context("Failed to send file")?;
         }
 
