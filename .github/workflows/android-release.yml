@@ -109,29 +109,34 @@ jobs:
         run: gh release upload ${{ github.ref_name }} dist/hiverra-portal-aarch64-linux-android.tar.gz* dist/hiverra-portal-android-installer.sh --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
       - name: Edit Release Body
-        run: |
-          gh release view ${{ github.ref_name }} --json body --jq '.body' > body.md
-
-          if ! grep -q "Android/Termux" body.md; then
-            cat > android_sh.txt <<EOF
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANDROID_INSTALL_SECTION: |
 
             ### Install prebuilt binaries via shell script (Android/Termux)
             
-            \`\`\`sh
-            curl -sSfL https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/hiverra-portal-android-installer.sh | sh
-            \`\`\`
-            EOF
+            ```sh
+            curl -sSfL [https://github.com/Spectra010s/portal/releases/download/$](https://github.com/Spectra010s/portal/releases/download/$){{ github.ref_name }}/hiverra-portal-android-installer.sh | sh
+            ```
+        run: |
+          # 1. Get the current body
+          gh release view ${{ github.ref_name }} --json body --jq '.body' > body.md
+
+          # 2. Insert the Android text if missing
+          if ! grep -q "Android/Termux" body.md; then
+            echo "$ANDROID_INSTALL_SECTION" > android_sh.txt
             sed -i "/### Install prebuilt binaries via powershell script/r android_sh.txt" body.md
           fi
 
+          # 3. Create the table row
           ANDROID_ROW="| [hiverra-portal-aarch64-linux-android.tar.gz](https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/hiverra-portal-aarch64-linux-android.tar.gz) | Android (Termux) | [checksum](https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/hiverra-portal-aarch64-linux-android.tar.gz.sha256) |"
 
+          # 4. Append row to table if missing
           if ! grep -q "aarch64-linux-android.tar.gz" body.md; then
             sed -i "/unknown-linux-gnu.tar.xz/a $ANDROID_ROW" body.md
           fi
 
+          # 5. Push the edit back to GitHub
           gh release edit ${{ github.ref_name }} --notes-file body.md
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
