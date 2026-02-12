@@ -8,9 +8,9 @@ use self_update::{
 };
 use std::{io::Cursor, time::Duration};
 use tar::Archive;
+use tempfile::Builder;
 use tokio::task::spawn_blocking;
 use xz2::read::XzDecoder;
-use tempfile::Builder;
 
 // Only import these when compiling for Windows
 #[cfg(target_os = "windows")]
