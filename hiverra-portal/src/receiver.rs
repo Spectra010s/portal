@@ -1,13 +1,13 @@
+use crate::config::models::PortalConfig;
+use crate::metadata::FileMetadata;
+use anyhow::{Context, Result};
+use bincode::deserialize;
+use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
 };
-// Import anyhow for add descriptive error handling
-use crate::metadata::FileMetadata;
-use anyhow::{Context, Result};
-use bincode::deserialize;
-use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 
 async fn get_local_ip() -> Option<String> {
     NetworkInterface::show()
@@ -25,27 +25,38 @@ async fn get_local_ip() -> Option<String> {
         })
 }
 
-pub async fn receive_file(port: &u16) -> Result<()> {
+pub async fn receive_file(port: &Option<u16>) -> Result<()> {
     println!("Portal: Initializing  systems...");
     println!("Portal: Getting IP address");
 
     let my_ip = get_local_ip()
         .await
         .context("Failed to get IP address, pls try again")?;
-    let n_addr = format!("0.0.0.0:{}", port);
-    let listener = TcpListener::bind(n_addr)
+    let config = PortalConfig::load().await?;
+
+    let n_addr = if let Some(p) = port {
+        println!("Overriding config port with CLI port...");
+        p
+    } else {
+        println!("Port not given, using config port...");
+        &config.default_port
+    };
+
+    let new_addr = format!("0.0.0.0:{}", n_addr);
+
+    let listener = TcpListener::bind(&new_addr)
         .await
         .context("Failed to bind to port")?;
 
     println!("Portal: crearing wormhole at {:?}", my_ip);
     println!(
-        "Portal: on the sender machine, run: portal send <file> -a {}",
-        my_ip
+        "Portal: on the sender machine, run: portal send <file> -a {} -p {}",
+        my_ip, n_addr
     );
 
     println!(
         "Receiver: Portal open. Waiting for a connection on port {}...",
-        port
+        n_addr
     );
 
     let (mut socket, addr) = listener

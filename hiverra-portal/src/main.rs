@@ -3,6 +3,7 @@ use std::process::exit;
 
 mod commands; // Links the commands file
 use commands::Commands; // Using the 'pub' enum and fn
+mod config;
 mod metadata;
 mod receiver;
 mod select;
