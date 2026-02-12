@@ -25,7 +25,7 @@ async fn create_metadata(file: &PathBuf, desc: Option<String>) -> Result<FileMet
     })
 }
 
-pub async fn send_file(file: &PathBuf, addr: &Option<String>) -> Result<()> {
+pub async fn send_file(file: &PathBuf, addr: &Option<String>, port: &u16) -> Result<()> {
     // Check 1. check if the path exists before attempting to send
     if !file.exists() {
         println!("Error: The file '{}' does not exist.", file.display());
@@ -93,8 +93,8 @@ pub async fn send_file(file: &PathBuf, addr: &Option<String>) -> Result<()> {
         let mut reader = BufReader::new(file_handle);
 
         println!("Portal: Buffer initialized and ready for streaming.");
-        let r_addr = format!("{}:7878", re_addr);
-        println!("Portal: connecting to {}", r_addr);
+        let r_addr = format!("{}:{}", re_addr, port);
+        println!("Portal: Connecting to {}", r_addr);
         let mut stream = TcpStream::connect(r_addr)
             .await
             .context("Could not connect to Reciever!")?;

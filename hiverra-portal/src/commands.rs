@@ -16,13 +16,21 @@ pub enum Commands {
     /// Send a file
     Send {
         // The file to send (optional, will prompt if omitted)
-        file: Option<PathBuf>, // changed it to PathBuf, so as to hold "File System Object".
-        /// The IP address of the receiver (e.g., 192.168.1.5)
+        file: Option<PathBuf>,
+        // PathBuf, so as to hold "File System Object".
+        /// The IP address of the receiver
         #[arg(short, long)]
         address: Option<String>,
+        /// The port the receiver is listening on
+        #[arg(short, long, default_value_t = 7878)]
+        port: u16,
     },
     /// Receive a file
-    Receive,
+    Receive {
+        /// Specify which port to use
+        #[arg(short, long, default_value_t = 7878)]
+        port: u16,
+    },
     /// Update portal to latest version
     Update,
 }
@@ -33,7 +41,11 @@ impl Commands {
     // We now return Result<()> to catch errors from sender/receiver
     pub async fn execute(&self) -> Result<()> {
         match self {
-            Commands::Send { file, address } => {
+            Commands::Send {
+                file,
+                address,
+                port,
+            } => {
                 // Determine which path to use
                 let path_to_send = match file {
                     Some(path) => path.clone(),
@@ -46,13 +58,13 @@ impl Commands {
                     }
                 };
 
-                send_file(&path_to_send, &address)
+                send_file(&path_to_send, &address, &port)
                     .await
                     .context("Failed to execute Send command")?;
             }
-            Commands::Receive => {
+            Commands::Receive { port } => {
                 // Pass the error up if receiving fails
-                receive_file()
+                receive_file(&port)
                     .await
                     .context("Failed to execute Receive command")?;
             }

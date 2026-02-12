@@ -25,17 +25,17 @@ async fn get_local_ip() -> Option<String> {
         })
 }
 
-pub async fn receive_file() -> Result<()> {
+pub async fn receive_file(port: &u16) -> Result<()> {
     println!("Portal: Initializing  systems...");
     println!("Portal: Getting IP address");
 
     let my_ip = get_local_ip()
         .await
         .context("Failed to get IP address, pls try again")?;
-
-    let listener = TcpListener::bind("0.0.0.0:7878")
+    let n_addr = format!("0.0.0.0:{}", port);
+    let listener = TcpListener::bind(n_addr)
         .await
-        .context("Failed to bind to port 7878")?;
+        .context("Failed to bind to port")?;
 
     println!("Portal: crearing wormhole at {:?}", my_ip);
     println!(
@@ -43,7 +43,10 @@ pub async fn receive_file() -> Result<()> {
         my_ip
     );
 
-    println!("Receiver: Portal open. Waiting for a connection on port 7878...");
+    println!(
+        "Receiver: Portal open. Waiting for a connection on port {}...",
+        port
+    );
 
     let (mut socket, addr) = listener
         .accept()
