@@ -68,7 +68,7 @@ jobs:
               fi
           done
           
-          TMP_DIR=$(mktemp -d "$PREFIX/tmp/portal.XXXXXX")
+          TMP_DIR=$(mktemp -d "$PREFIX/tmp/portal-install")
           FILE="\$TMP_DIR/hiverra-portal.tar.gz"
 
           echo "Downloading..."
@@ -112,31 +112,64 @@ jobs:
       - name: Edit Release Body
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANDROID_INSTALL_SECTION: |
-
-            ### Install prebuilt binaries via shell script (Android/Termux)
-            
-            ```sh
-            curl -sSfL [https://github.com/Spectra010s/portal/releases/download/$](https://github.com/Spectra010s/portal/releases/download/$){{ github.ref_name }}/hiverra-portal-android-installer.sh | sh
-            ```
+          REF: ${{ github.ref_name }}
         run: |
-          # 1. Get the current body
-          gh release view ${{ github.ref_name }} --json body --jq '.body' > body.md
+          # Fetch the current release notes
+          gh release view "$REF" --json body --jq '.body' > body.md
 
-          # 2. Insert the Android text if missing
-          if ! grep -q "Android/Termux" body.md; then
-            echo "$ANDROID_INSTALL_SECTION" > android_sh.txt
-            sed -i "/### Install prebuilt binaries via powershell script/r android_sh.txt" body.md
+          # Skip if Android section is already present
+          if grep -q "Android / Termux" body.md; then
+            echo "Android section already exists. Skipping edit."
+            exit 0
           fi
 
-          # 3. Create the table row
-          ANDROID_ROW="| [hiverra-portal-aarch64-linux-android.tar.gz](https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/hiverra-portal-aarch64-linux-android.tar.gz) | Android (Termux) | [checksum](https://github.com/Spectra010s/portal/releases/download/${{ github.ref_name }}/hiverra-portal-aarch64-linux-android.tar.gz.sha256) |"
+          # Create temporary files for clean insertion
+          cat > android_section.md <<'EOF'
 
-          # 4. Append row to table if missing
-          if ! grep -q "aarch64-linux-android.tar.gz" body.md; then
-            sed -i "/unknown-linux-gnu.tar.xz/a $ANDROID_ROW" body.md
+          ### Install prebuilt binaries via shell script (Android / Termux)
+
+          ```sh
+          curl --proto '=https' --tlsv1.2 -LsSf \
+            https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-android-installer.sh | sh
+          ```
+
+          Works in Termux (aarch64-linux-android target).
+          EOF
+
+          cat > table_row.md <<'EOF'
+          hiverra-portal-aarch64-linux-android.tar.gz	Android (Termux)	[checksum](https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-aarch64-linux-android.tar.gz.sha256)
+          EOF
+
+          # Insert Android install section
+          if grep -q "npm install hiverra-portal@" body.md; then
+            # After npm install block
+            sed -i "/npm install hiverra-portal@/r android_section.md" body.md
+          elif grep -q "^Download .*Portal" body.md; then
+            # Before "Download ..." heading + ensure blank line above it
+            sed -i '/^Download .*Portal/i\
+            ' body.md
+            sed -i "/^Download .*Portal/r android_section.md" body.md
+          else
+            # Fallback: append at end with spacing
+            printf '\n\n' >> body.md
+            cat android_section.md >> body.md
           fi
 
-          # 5. Push the edit back to GitHub
-          gh release edit ${{ github.ref_name }} --notes-file body.md
+          # Insert table row exactly once
+          # First remove any previous (possibly broken) Android row
+          sed -i '/aarch64-linux-android\.tar\.gz/d' body.md
 
+          if grep -q "x86_64-unknown-linux-gnu\.tar\.xz" body.md; then
+            sed -i "/x86_64-unknown-linux-gnu\.tar\.xz/r table_row.md" body.md
+          elif grep -q "^---" body.md; then
+            sed -i "/^---/r table_row.md" body.md
+          else
+            printf '\n' >> body.md
+            cat table_row.md >> body.md
+          fi
+
+          # Apply the updated notes
+          gh release edit "$REF" --notes-file body.md
+
+          # Clean up temp files
+          rm -f android_section.md table_row.md
