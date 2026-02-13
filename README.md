@@ -1,68 +1,55 @@
 # Portal
 
-Portal is a personal file-receiving app that allows users to securely upload and download files via HTTPS. Each installation is private and configurable, enabling users to share and receive files easily from multiple devices.
+Hiverra Portal: A lightweight CLI tool to transfer files between devices locally or remotely.
 
-# Current Features
+# Overview
 
-1. Upload / Share Link
+This project, "Portal" (also referred to as "Hiverra Portal" in some contexts), is a command-line tool designed for secure file transfer between devices. It operates locally and is configured for private, individual use.
 
-- Single or multiple file uploads.
+# What this project does
 
-2. Responsive UI
+Portal allows users to send files from one device to another. It can also be set up to receive files. The primary features include:
 
-- Works across phones, tablets, and desktops.
+- **File Upload/Sharing:** Users can upload single or multiple files. This generates a link for others to download.
+- **Secure Transfer:** All file transfers are conducted over HTTPS.
+- **Responsive Interface:** The web interface (if applicable) is designed to work on various devices like phones, tablets, and desktops.
+- **Status Messages:** The application provides feedback on the success or failure of operations.
 
-3. Security
+Future planned features aim to enhance usability and functionality, such as https transfers, file previews, folder organization, search capabilities, personalized links, automatic file expiration, and notifications.
 
-- HTTPS links, isolated files.
+# Who it is for
 
-4. Status
+Portal is intended for individuals who need a private and secure way to share files without relying on third-party services that might compress files or limit quality. It's suitable for personal use or small-scale file sharing.
 
-- Shows success/error messages.
+# How to run or use it
 
-# Coming Soon / Planned Features
+The primary interface for Portal is a command-line tool built in Rust.
 
-1. Local WiFi Transfer
+Here are the common commands:
 
-- Quick file transfer between devices on the same network.
+- **Sending a file:**
+    - `portal send <file_path>`: To send a specific file.
+    - If no file is specified, it prompts the user to select a file.
+    - You can also specify an `address` and `port` for the receiver: `portal send --address <IP_ADDRESS> --port <PORT> <file_path>`.
 
-2. File Previews
+- **Receiving a file:**
+    - `portal receive`: This command puts the application in listening mode to receive files.
+    - You can specify a `port` to listen on: `portal receive --port <PORT>`.
 
-- Images, PDFs, or video thumbnails before downloading.
+- **Updating the application:**
+    - `portal update`: This command is intended to update Portal to the latest version.
 
-3. Folders / Categorization
+- **Configuration management:**
+    - `portal config setup`: This command initiates an interactive setup process to configure the application, such as setting a username and default port.
+    - `portal config set <key> <value>`: Allows setting specific configuration options (e.g., `portal config set port 8080`).
+    - `portal config show <key>`: Displays the value of a specific configuration setting.
+    - `portal config list`: Lists all current configuration settings.
 
-- Organize files by project, type, or date.
+The project also includes build workflows (`.github/workflows/`) that suggest it can be built for different platforms (e.g., Android via Termux, Linux, macOS, Windows). The specific installation method for compiled binaries would depend on how these workflows are triggered and what artifacts they produce.
 
-4. Search / Filter
+# Notes
 
-- Quickly find files by name, type, or upload date.
-
-5. Personalized Link / Short URL
-
-- Each user can configure their upload link.
-
-6. Automatic Expiration / Cleanup
-
-- Files disappear after a set time.
-
-7. Notifications
-
-- Push or in-app notifications when files are uploaded.
-
-8. Files Inbox
-   List, download, and view metadata of uploaded files.
-
-9. The Portal Quarantine Strategy
-
-## Purpose
-
-Portal is designed to provide a simple, secure, and private alternative for sharing files without relying on third-party apps that compress or limit file quality. It’s ideal for personal use or small-scale sharing.
-
-### Tech Stack
-
-HTML, CSS, JS for frontend
-
-Python, Flask for backend
-
-cloud storage integration (Supabase, AWS S3, etc.)
+- **Initial Setup:** The application requires initial configuration, likely through `portal config setup`, before it can be fully used.
+- **Receiver IP/Port:** When sending files, you need to know the IP address and port of the receiving device.
+- **HTTPS vs. Local:** Portal primarily operates over local network transfers using TCP. The implementation of HTTPS for the web interface is not fully supported.
+- **"Portal Quarantine Strategy":** This implies a multi-stage process for handling received files, including staging, extension verification, and potentially external scanning.
