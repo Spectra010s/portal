@@ -1,6 +1,8 @@
-use anyhow::{Context, Result};
-use inquire::Select;
-use tokio::fs::read_dir;
+use {
+    anyhow::{Context, Result},
+    inquire::Select,
+    tokio::fs::read_dir,
+};
 
 pub async fn select_file_to_send() -> Result<Option<String>> {
     // 1. Open the current directory

@@ -1,5 +1,7 @@
-use crate::config::models::PortalConfig;
-use anyhow::{Context, Result};
+use {
+    crate::config::models::PortalConfig,
+    anyhow::{Context, Result},
+};
 
 pub async fn show_config_value(key: &str) -> Result<()> {
     // load the file

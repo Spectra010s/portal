@@ -1,14 +1,21 @@
 use clap::Parser;
 use std::process::exit;
 
-mod commands; // Links the commands file
-use commands::Commands; // Using the 'pub' enum and fn
-mod config;
+// link files
+mod commands;
+mod config {
+    pub mod list;
+    pub mod models;
+    pub mod set;
+    pub mod setup;
+    pub mod show;
+}
 mod metadata;
 mod receiver;
 mod select;
 mod sender;
 mod update;
+use commands::Commands;
 
 // 1. Defining the Map (The Struct)
 #[derive(Parser)]
