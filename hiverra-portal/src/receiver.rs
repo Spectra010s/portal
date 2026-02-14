@@ -1,14 +1,16 @@
-use crate::config::models::PortalConfig;
-use crate::config::models::Resolvable;
-use crate::metadata::FileMetadata;
-use anyhow::{Context, Result};
-use bincode::deserialize;
-use network_interface::{NetworkInterface, NetworkInterfaceConfig};
-use std::path::PathBuf;
-use tokio::{
-    fs::{File, create_dir_all},
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
+use {
+    crate::{config::models::PortalConfig, metadata::FileMetadata},
+    anyhow::{Context, Result, anyhow},
+    bincode::deserialize,
+    home::home_dir,
+    inquire::Text,
+    network_interface::{NetworkInterface, NetworkInterfaceConfig},
+    std::path::PathBuf,
+    tokio::{
+        fs::{File, create_dir_all},
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+    },
 };
 
 async fn get_local_ip() -> Option<String> {
@@ -34,14 +36,23 @@ pub async fn receive_file(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()
     let my_ip = get_local_ip()
         .await
         .context("Failed to get IP address, pls try again")?;
-    let cfg = PortalConfig::load().await?;
 
-    if port.is_some() {
+    // Use the CLI flag directly
+    let n_port = if let Some(port) = port {
         println!("Portal: Overriding config port with CLI port...");
+        port
+    } else if let Some(cfg) = PortalConfig::load_or_return().await? {
+        //  Use config if it exists and has a value
+        if let Some(p) = cfg.network.default_port {
+            println!("Portal: Port not given, using config port...");
+            p
+        } else {
+            return Err(anyhow!("No port provided and config has no port set"));
+        }
     } else {
-        println!("Portal: Port not given, using config port...");
+        //  Neither CLI nor config
+        return Err(anyhow!("No port provided and no config found"));
     };
-    let n_port = cfg.network.resolve(port);
 
     let new_addr = format!("0.0.0.0:{}", n_port);
 
@@ -104,7 +115,44 @@ pub async fn receive_file(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()
 
     // 4. Create the file on disk
 
-    let target_dir = cfg.storage.resolve(dir.clone());
+    // Use CLI-provided path, or config, or prompt user if neither exists
+    let target_dir: PathBuf = if let Some(dir) = dir {
+        dir.clone()
+    } else if let Some(cfg) = PortalConfig::load_or_return().await? {
+        if let Some(d) = &cfg.storage.download_dir {
+            println!("Portal: Using directory from config: {}", d.display());
+            d.clone()
+        } else {
+            println!("Portal: Config exists but download directory not set.");
+            let default_path = home_dir()
+                .ok_or_else(|| anyhow!("Could not find home directory"))?
+                .join("Downloads")
+                .display()
+                .to_string();
+
+            let dir_string = Text::new("Portal: Where should Portal save this file?")
+                .with_default(&default_path)
+                .with_help_message("Enter a valid folder path.")
+                .prompt()
+                .context("No directory provided")?;
+
+            PathBuf::from(dir_string)
+        }
+    } else {
+        let default_path = home_dir()
+            .ok_or_else(|| anyhow!("Could not find home directory"))?
+            .join("Downloads")
+            .display()
+            .to_string();
+
+        let dir_string = Text::new("Portal: Where should Portal save this file?")
+            .with_default(&default_path)
+            .with_help_message("Enter a valid folder path.")
+            .prompt()
+            .context("No directory provided")?;
+
+        PathBuf::from(dir_string)
+    };
 
     //  Create the directory if not given
     create_dir_all(&target_dir).await?;

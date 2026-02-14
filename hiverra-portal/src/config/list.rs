@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 
 pub async fn list_config() -> Result<String> {
     // load config
-    let cfg = PortalConfig::load().await?;
+    let cfg = PortalConfig::load_all().await?;
 
     let output = toml::to_string_pretty(&cfg).context("Failed to format config")?;
 

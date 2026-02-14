@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 
 pub async fn show_config_value(key: &str) -> Result<()> {
     // load the file
-    let cfg = PortalConfig::load()
+    let cfg = PortalConfig::load_all()
         .await
         .context("Failed to load configuration")?;
     // match and show the value for the key
