@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UserConfig {
-    pub username: String,
+    pub username: Option<String>,
 }
 
 impl UserConfig {
@@ -11,11 +11,13 @@ impl UserConfig {
         match field {
             "username" => {
                 self.username = if value.ends_with("@portal") {
-                    value.to_string()
+                    Some(value.to_string())
                 } else {
-                    format!("{}@portal", value)
+                    format!("{}@portal", value).into()
                 };
-                Ok(self.username.clone())
+                self.username
+                    .clone()
+                    .ok_or_else(|| anyhow!("username not set"))
             }
             _ => Err(anyhow!("Unknown field '{}' in [user]", field)),
         }
@@ -23,7 +25,10 @@ impl UserConfig {
 
     pub fn get_value(&self, field: &str) -> Result<String> {
         match field {
-            "username" => Ok(self.username.clone()),
+            "username" => self
+                .username
+                .clone()
+                .ok_or_else(|| anyhow!("username not set")),
             _ => Err(anyhow!("Unknown field '{}' in [user]", field)),
         }
     }

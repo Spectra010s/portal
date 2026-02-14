@@ -1,14 +1,15 @@
-use inquire::{Confirm, Text};
-use std::path::PathBuf;
-use tokio::{
-    fs::{File, metadata},
-    io::{AsyncReadExt, AsyncWriteExt, BufReader},
-    net::TcpStream,
+use {
+    crate::metadata::FileMetadata,
+    anyhow::{Context, Result},
+    bincode::serialize,
+    inquire::{Confirm, Text},
+    std::path::PathBuf,
+    tokio::{
+        fs::{File, metadata},
+        io::{AsyncReadExt, AsyncWriteExt, BufReader},
+        net::TcpStream,
+    },
 };
-// Import anyhow for add descriptive error handling
-use crate::metadata::FileMetadata;
-use anyhow::{Context, Result};
-use bincode::serialize;
 
 async fn create_metadata(file: &PathBuf, desc: Option<String>) -> Result<FileMetadata> {
     let attr = metadata(file).await?;
@@ -46,9 +47,15 @@ pub async fn send_file(file: &PathBuf, addr: &Option<String>, port: &u16) -> Res
         // Ask user for reciver addrress
         let re_addr = match addr {
             Some(address) => address.clone(),
-            None => Text::new("Portal: Enter Recieiver's address:")
-                .prompt()
-                .context("Failed to get address")?,
+            None => loop {
+                let input = Text::new("Portal: Enter Receiver's address:")
+                    .prompt()
+                    .context("Failed to get address")?;
+                if !input.trim().is_empty() {
+                    break input;
+                }
+                println!("Portal: Address cannot be empty. Try again.");
+            },
         };
 
         // 2. Ask if user wants to add a description first
