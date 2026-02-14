@@ -39,7 +39,7 @@ pub async fn receive_file(port: &Option<u16>) -> Result<()> {
         p
     } else {
         println!("Port not given, using config port...");
-        &config.default_port
+        &config.network.default_port
     };
 
     let new_addr = format!("0.0.0.0:{}", n_addr);

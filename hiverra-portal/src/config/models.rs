@@ -1,16 +1,29 @@
+pub mod user;  
+pub mod network; 
+pub mod storage; 
+
+use {
+ user::UserConfig,
+ network::NetworkConfig,
+ storage::StorageConfig
+};
+
 use anyhow::{Context, Result, anyhow};
 use home::home_dir;
 use inquire::{CustomType, Text, validator::Validation};
 use rand::random;
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::fs;
 
+use serde::{Serialize, Deserialize};
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PortalConfig {
-    pub default_port: u16,
-    pub username: String,
+    pub user: UserConfig,
+    pub network: NetworkConfig,
+    pub storage: StorageConfig,
 }
+
 
 impl PortalConfig {
     /// Returns the path ~/.portal/
@@ -24,16 +37,18 @@ impl PortalConfig {
         println!(" Welcome to Portal! Let's get you set up.");
 
         let suggested_name = format!("puser_{}", random::<u16>());
-
-        let username = Text::new("What is your username?")
+      // ask for username
+        let user_name = Text::new("What is your username?")
             .with_default(&suggested_name)
             .with_help_message(
                 "This identifies you during transfers.
-    Tip: Press Enter to keep the random suggestion.",
+                Tip: Press Enter to keep the random suggestion.",
             )
             .with_formatter(&|val| format!("Username: {}@portal", val))
             .prompt()?;
-
+            
+        
+       // ask for port
         let port = CustomType::<u16>::new("Which port should Portal use?")
             .with_default(7878)
             .with_help_message("The local port used for listening. 7878 is recommended.")
@@ -47,17 +62,42 @@ impl PortalConfig {
                 }
             })
             .prompt()?;
+            
+       // ask for downloads directory
+       
+       let default_path = home_dir()
+        .ok_or_else(|| anyhow!("Home directory not found"))?
+        .join("Downloads")
+        .display()
+        .to_string();
 
+    let dir_string = Text::new("Where should Portal save downloaded files?")
+        .with_default(&default_path)
+        .with_help_message("Enter a valid folder path.")
+        .prompt()?;
+        
         let config = Self {
-            username: format!("{}@portal", username),
-            default_port: port,
+            user: UserConfig {
+            username: if user_name.ends_with("@portal") {
+                    user_name.to_string()
+                } else {
+                    format!("{}@portal", user_name)
+                }
+            },
+            network: NetworkConfig { 
+            default_port: port},
+            storage: StorageConfig { 
+                download_dir: PathBuf::from(dir_string) 
+            },
         };
 
         config.save().await?;
+        
         println!("\n Configuration saved! You're ready to use Portal.");
         Ok(config)
     }
-
+   
+  
     /// Load from ~/.portal/config.toml or create default
     pub async fn load() -> Result<Self> {
         let dir = Self::get_dir().await?;
@@ -87,26 +127,54 @@ impl PortalConfig {
 
         Ok(config)
     }
-    /// Update specific field to config
-    pub fn update_field(&mut self, key: &str, value: &str) -> Result<String> {
-        match key.to_lowercase().as_str() {
-            "port" => {
-                self.default_port = value
-                    .parse()
-                    .context("Invlaid Port number: Port must be a number")?;
-                Ok(self.default_port.to_string())
-            }
-            "username" => {
-                self.username = if value.ends_with("@portal") {
-                    value.to_string()
-                } else {
-                    format!("{}@portal", value)
-                };
-                Ok(self.username.clone())
-            }
-            _ => Err(anyhow!("Unknown config key: {}", key)),
+    
+
+    /// Update specific field to configuration file
+    pub fn update_section(&mut self, key: &str, value: &str) -> Result<String> {
+      
+           //  Split the key by the dot
+        let parts: Vec<&str> = key.split('.').collect();
+    //  We need at exactly two parts: "section" and "field"
+        if parts.len() != 2 {
+            return Err(anyhow!(
+                "Invalid format. Use 'section.field' (e.g., user.username)"
+            ));
+        }
+
+        let section = parts[0];
+        let field = parts[1];
+
+        match section.to_lowercase().as_str() {
+            "user" => self.user.update(field, value),
+            "network" => self.network.update(field, value),
+            "storage" => self.storage.update(field, value),
+            _ => Err(anyhow!("Unknown section: '{}'", section)),
         }
     }
+
+    /// Get the value of a specified key 
+    pub fn get_key_value(&self, key: &str) -> Result<String> {
+    
+        let parts: Vec<&str> = key.split('.').collect();
+        
+        if parts.len() != 2 {
+            return Err(anyhow!(
+                "Invalid format. Use 'section.field' (e.g., user.username)"
+            ));
+        }
+        
+        let section = parts[0];
+        let field = parts[1];
+
+        match section.to_lowercase().as_str() {
+            "user" => self.user.get_value(field),
+          "network" => self.network.get_value(field),
+            "storage" => self.storage.get_value(field),
+            _ => Err(anyhow!("Key '{}' not recognized", key)),
+        }
+    
+}
+
 
     /// Save current config to disk
     pub async fn save(&self) -> Result<()> {
