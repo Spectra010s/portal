@@ -1,15 +1,22 @@
 use {
-    anyhow::{Context, Result},
-    clap::Subcommand,
-    std::path::PathBuf,
-};
-
-use crate::{
-    config::{list::list_config, set::set_config, setup::handle_setup, show::show_config_value},
+   anyhow::{
+     Context, 
+     Result
+  },
+  clap::Subcommand,
+  std::path::PathBuf,
+  crate::{
+    config::{
+    list::list_config, 
+    set::set_config, 
+    setup::handle_setup,
+    show::show_config_value
+    },
     receiver::receive_file,
     select::select_file_to_send,
     sender::send_file,
     update::update_portal,
+  } 
 };
 
 // 2. Defining the Choices (The Enum)

@@ -7,10 +7,12 @@ pub async fn show_config_value(key: &str) -> Result<()> {
         .await
         .context("Failed to load configuration")?;
     // match and show the value for the key
-    match key.to_lowercase().as_str() {
-        "port" => println!("Current Default port: {}", cfg.default_port.to_string()),
-        "username" => println!("Current username: {}", cfg.username),
-        _ => println!("Key '{}' not recognized", key),
-    }
+    let new_val = cfg.get_key_value(key)?;
+    
+    
+    println!("{}: {}", key, new_val);
     Ok(())
 }
+
+
+
