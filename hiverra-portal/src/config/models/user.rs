@@ -1,5 +1,7 @@
-use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
+use {
+    anyhow::{Result, anyhow},
+    serde::{Deserialize, Serialize},
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UserConfig {

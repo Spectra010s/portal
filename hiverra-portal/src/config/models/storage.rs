@@ -1,6 +1,8 @@
-use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use {
+    anyhow::{Result, anyhow},
+    serde::{Deserialize, Serialize},
+    std::path::PathBuf,
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StorageConfig {
