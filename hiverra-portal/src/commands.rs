@@ -1,22 +1,16 @@
 use {
-   anyhow::{
-     Context, 
-     Result
-  },
-  clap::Subcommand,
-  std::path::PathBuf,
-  crate::{
-    config::{
-    list::list_config, 
-    set::set_config, 
-    setup::handle_setup,
-    show::show_config_value
+    crate::{
+        config::{
+            list::list_config, set::set_config, setup::handle_setup, show::show_config_value,
+        },
+        receiver::receive_file,
+        select::select_file_to_send,
+        sender::send_file,
+        update::update_portal,
     },
-    receiver::receive_file,
-    select::select_file_to_send,
-    sender::send_file,
-    update::update_portal,
-  } 
+    anyhow::{Context, Result},
+    clap::Subcommand,
+    std::path::PathBuf,
 };
 
 // 2. Defining the Choices (The Enum)
@@ -39,6 +33,8 @@ pub enum Commands {
         /// Specify which port to use
         #[arg(short, long)]
         port: Option<u16>,
+        #[arg(short, long)]
+        dir: Option<PathBuf>,
     },
     /// Update portal to latest version
     Update,
@@ -52,16 +48,12 @@ pub enum Commands {
 #[derive(Subcommand)]
 pub enum ConfigAction {
     /// Set or Update a setting
-    Set {
-        key: String,
-        value: String,
-    },
+    Set { key: String, value: String },
     /// View current settings variable value
-    Show {
-        key: String,
-    },
+    Show { key: String },
     /// List all variables
     List,
+    /// Setup Configuration interactively
     Setup,
 }
 
@@ -91,9 +83,9 @@ impl Commands {
                     .await
                     .context("Failed to execute Send command")?;
             }
-            Commands::Receive { port } => {
+            Commands::Receive { port, dir } => {
                 // Pass the error up if receiving fails
-                receive_file(&port)
+                receive_file(*port, &dir)
                     .await
                     .context("Failed to execute Receive command")?;
             }
