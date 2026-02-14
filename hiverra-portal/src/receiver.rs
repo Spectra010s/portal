@@ -1,8 +1,10 @@
 use crate::config::models::PortalConfig;
+use crate::config::models::Resolvable;
 use crate::metadata::FileMetadata;
 use anyhow::{Context, Result};
 use bincode::deserialize;
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
+use std::path::PathBuf;
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncWriteExt},
@@ -25,24 +27,23 @@ async fn get_local_ip() -> Option<String> {
         })
 }
 
-pub async fn receive_file(port: &Option<u16>) -> Result<()> {
+pub async fn receive_file(port: Option<u16>, _dir: &Option<PathBuf>) -> Result<()> {
     println!("Portal: Initializing  systems...");
     println!("Portal: Getting IP address");
 
     let my_ip = get_local_ip()
         .await
         .context("Failed to get IP address, pls try again")?;
-    let config = PortalConfig::load().await?;
+    let cfg = PortalConfig::load().await?;
 
-    let n_addr = if let Some(p) = port {
+    if port.is_some() {
         println!("Overriding config port with CLI port...");
-        p
     } else {
         println!("Port not given, using config port...");
-        &config.network.default_port
     };
+    let n_port = cfg.network.resolve(port);
 
-    let new_addr = format!("0.0.0.0:{}", n_addr);
+    let new_addr = format!("0.0.0.0:{}", n_port);
 
     let listener = TcpListener::bind(&new_addr)
         .await
@@ -51,12 +52,12 @@ pub async fn receive_file(port: &Option<u16>) -> Result<()> {
     println!("Portal: crearing wormhole at {:?}", my_ip);
     println!(
         "Portal: on the sender machine, run: portal send <file> -a {} -p {}",
-        my_ip, n_addr
+        my_ip, n_port
     );
 
     println!(
         "Receiver: Portal open. Waiting for a connection on port {}...",
-        n_addr
+        n_port
     );
 
     let (mut socket, addr) = listener
