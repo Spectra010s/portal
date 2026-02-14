@@ -33,7 +33,8 @@ pub enum Commands {
         /// Specify which port to use
         #[arg(short, long)]
         port: Option<u16>,
-        #[arg(short, long)]
+        /// Directory where received files will be saved
+        #[arg(short, long, value_name = "PATH")]
         dir: Option<PathBuf>,
     },
     /// Update portal to latest version
@@ -48,12 +49,17 @@ pub enum Commands {
 #[derive(Subcommand)]
 pub enum ConfigAction {
     /// Set or Update a setting
-    Set { key: String, value: String },
+    Set {
+        /// The configuration key to change
+        key: String,
+        /// The new value for the setting
+        value: String,
+    },
     /// View current settings variable value
     Show { key: String },
-    /// List all variables
+    /// List all cureent configuration settings
     List,
-    /// Setup Configuration interactively
+    /// Initialize or reconfigure Portal's default settings interactively
     Setup,
 }
 

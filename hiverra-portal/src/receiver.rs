@@ -6,7 +6,7 @@ use bincode::deserialize;
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use std::path::PathBuf;
 use tokio::{
-    fs::File,
+    fs::{File, create_dir_all},
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
 };
@@ -27,7 +27,7 @@ async fn get_local_ip() -> Option<String> {
         })
 }
 
-pub async fn receive_file(port: Option<u16>, _dir: &Option<PathBuf>) -> Result<()> {
+pub async fn receive_file(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()> {
     println!("Portal: Initializing  systems...");
     println!("Portal: Getting IP address");
 
@@ -37,9 +37,9 @@ pub async fn receive_file(port: Option<u16>, _dir: &Option<PathBuf>) -> Result<(
     let cfg = PortalConfig::load().await?;
 
     if port.is_some() {
-        println!("Overriding config port with CLI port...");
+        println!("Portal: Overriding config port with CLI port...");
     } else {
-        println!("Port not given, using config port...");
+        println!("Portal: Port not given, using config port...");
     };
     let n_port = cfg.network.resolve(port);
 
@@ -103,8 +103,15 @@ pub async fn receive_file(port: Option<u16>, _dir: &Option<PathBuf>) -> Result<(
     }
 
     // 4. Create the file on disk
-    // filename is now a &String, we dont need the &* anymore.
-    let mut out_file = File::create(filename)
+
+    let target_dir = cfg.storage.resolve(dir.clone());
+
+    //  Create the directory if not given
+    create_dir_all(&target_dir).await?;
+
+    //  Create the file inside that directory
+    let file_path = target_dir.join(filename);
+    let mut out_file = File::create(&file_path)
         .await
         .context("Failed to create file on disk")?;
 
@@ -128,7 +135,11 @@ pub async fn receive_file(port: Option<u16>, _dir: &Option<PathBuf>) -> Result<(
         received_so_far += bytes_read as u64;
     }
 
-    println!("Portal: Transfer complete! Saved as {}", filename);
+    println!(
+        "Portal: Transfer complete! Saved as '{}' to '{}'",
+        filename,
+        &file_path.display()
+    );
 
     Ok(())
 }
