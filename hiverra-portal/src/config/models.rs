@@ -2,26 +2,24 @@ pub mod network;
 pub mod storage;
 pub mod user;
 
-use {network::NetworkConfig, storage::StorageConfig, user::UserConfig};
-
-use anyhow::{Context, Result, anyhow};
-use home::home_dir;
-use inquire::{CustomType, Text, validator::Validation};
-use rand::random;
-use std::path::PathBuf;
-use tokio::fs;
-
-use serde::{Deserialize, Serialize};
+use {
+    anyhow::{Context, Result, anyhow},
+    home::home_dir,
+    inquire::{CustomType, Text, validator::Validation},
+    network::NetworkConfig,
+    rand::random,
+    serde::{Deserialize, Serialize},
+    std::path::PathBuf,
+    storage::StorageConfig,
+    tokio::fs,
+    user::UserConfig,
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PortalConfig {
     pub user: UserConfig,
     pub network: NetworkConfig,
     pub storage: StorageConfig,
-}
-
-pub trait Resolvable<T> {
-    fn resolve(&self, provided: Option<T>) -> T;
 }
 
 impl PortalConfig {
@@ -31,6 +29,21 @@ impl PortalConfig {
         p.push(".portal");
         Ok(p)
     }
+
+    // forbsettinf config when theres no, values will be updated immediately
+    pub fn new_empty_for_set(key: &str, value: &str) -> Result<Self> {
+        let mut cfg = PortalConfig {
+            user: UserConfig { username: None },
+            network: NetworkConfig { default_port: None },
+            storage: StorageConfig { download_dir: None },
+        };
+
+        // Only fill the key being set
+        cfg.update_section(key, value)?;
+
+        Ok(cfg)
+    }
+
     /// Setup Config for first time
     pub async fn interactive_init() -> Result<Self> {
         println!(" Welcome to Portal! Let's get you set up.");
@@ -73,18 +86,19 @@ impl PortalConfig {
             .with_default(&default_path)
             .with_help_message("Enter a valid folder path.")
             .prompt()?;
-
         let config = Self {
             user: UserConfig {
                 username: if user_name.ends_with("@portal") {
-                    user_name.to_string()
+                    Some(user_name.to_string())
                 } else {
-                    format!("{}@portal", user_name)
+                    format!("{}@portal", user_name).into()
                 },
             },
-            network: NetworkConfig { default_port: port },
+            network: NetworkConfig {
+                default_port: Some(port),
+            },
             storage: StorageConfig {
-                download_dir: PathBuf::from(dir_string),
+                download_dir: Some(PathBuf::from(dir_string)),
             },
         };
 
@@ -95,25 +109,15 @@ impl PortalConfig {
     }
 
     /// Load from ~/.portal/config.toml or create default
-    pub async fn load() -> Result<Self> {
+
+    pub async fn load_or_return() -> Result<Option<Self>> {
         let dir = Self::get_dir().await?;
         let file_path = dir.join("config.toml");
 
-        // Check if the file exists. If its not, tell user to setup
         if !file_path.exists() {
-            if !dir.exists() {
-                fs::create_dir_all(&dir)
-                    .await
-                    .context("Failed to create configuration directory")?;
-            }
-
-            // Trigger the wizard and return its result
-            return Err(anyhow!(
-                "No config found. Run 'portal config setup' or 'portal config set <KEY>' to begin."
-            ));
+            return Ok(None);
         }
 
-        // If we reached here, then the file exists. Read it.
         let content = fs::read_to_string(&file_path)
             .await
             .context("Failed to read config.toml")?;
@@ -121,7 +125,16 @@ impl PortalConfig {
         let config: Self =
             toml::from_str(&content).context("Syntax error in ~/.portal/config.toml")?;
 
-        Ok(config)
+        Ok(Some(config))
+    }
+
+    pub async fn load_all() -> Result<Self> {
+        match Self::load_or_return().await? {
+            Some(cfg) => Ok(cfg),
+            None => Err(anyhow!(
+                "No config found. Run 'portal config setup' or 'portal config set <KEY>' to begin."
+            )),
+        }
     }
 
     /// Update specific field to configuration file
@@ -169,7 +182,13 @@ impl PortalConfig {
 
     /// Save current config to disk
     pub async fn save(&self) -> Result<()> {
-        let file_path = Self::get_dir().await?.join("config.toml");
+        let dir = Self::get_dir().await?;
+        // Ensure the directory exists
+        fs::create_dir_all(&dir)
+            .await
+            .context("Failed to create config directory")?;
+
+        let file_path = dir.join("config.toml");
 
         let toml_string =
             toml::to_string_pretty(self).context("Failed to format configuration data")?;
