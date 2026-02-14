@@ -1,12 +1,10 @@
 use anyhow::{Result, anyhow};
-use serde::{Serialize, Deserialize};
-
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct UserConfig{
-   pub username: String
+pub struct UserConfig {
+    pub username: String,
 }
-
 
 impl UserConfig {
     pub fn update(&mut self, field: &str, value: &str) -> Result<String> {
@@ -22,11 +20,11 @@ impl UserConfig {
             _ => Err(anyhow!("Unknown field '{}' in [user]", field)),
         }
     }
-    
+
     pub fn get_value(&self, field: &str) -> Result<String> {
-    match field {
-                "username" => Ok(self.username.clone()),
-                _ => Err(anyhow!("Unknown field '{}' in [user]", field)),
-            }
-     }
+        match field {
+            "username" => Ok(self.username.clone()),
+            _ => Err(anyhow!("Unknown field '{}' in [user]", field)),
+        }
+    }
 }
