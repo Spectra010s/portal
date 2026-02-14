@@ -1,6 +1,4 @@
-use {anyhow::Result, inquire::Confirm};
-
-use crate::config::models::PortalConfig;
+use {crate::config::models::PortalConfig, anyhow::Result, inquire::Confirm};
 
 pub async fn handle_setup() -> Result<()> {
     let path = PortalConfig::get_dir().await?.join("config.toml");

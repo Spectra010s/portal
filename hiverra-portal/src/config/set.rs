@@ -1,5 +1,7 @@
-use crate::config::models::PortalConfig;
-use anyhow::{Context, Result};
+use {
+    crate::config::models::PortalConfig,
+    anyhow::{Context, Result},
+};
 
 pub async fn set_config(key: &str, value: &str) -> Result<()> {
     // Load existing config if it exists
