@@ -27,6 +27,10 @@ pub enum Commands {
         /// The port the receiver is listening on
         #[arg(short, long, default_value_t = 7878)]
         port: u16,
+        /// The username of the receiver
+        /// If omitted, Portal will prompt you for a name.
+        #[arg(short, long, value_name = "USERNAME")]
+        to: Option<String>,
     },
     /// Receive a file
     Receive {
@@ -72,6 +76,7 @@ impl Commands {
                 file,
                 address,
                 port,
+                to,
             } => {
                 // Determine which path to use
                 let path_to_send = match file {
@@ -85,7 +90,7 @@ impl Commands {
                     }
                 };
 
-                send_file(&path_to_send, &address, &port)
+                send_file(&path_to_send, &address, &port, &to)
                     .await
                     .context("Failed to execute Send command")?;
             }

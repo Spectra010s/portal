@@ -15,6 +15,11 @@ mod receiver;
 mod select;
 mod sender;
 mod update;
+mod discovery {
+    pub mod beacon;
+    pub mod listener;
+    pub mod protocol;
+}
 use commands::Commands;
 
 // 1. Defining the Map (The Struct)
