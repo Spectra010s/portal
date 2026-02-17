@@ -6,7 +6,7 @@ use {
     home::home_dir,
     inquire::Text,
     network_interface::{NetworkInterface, NetworkInterfaceConfig},
-    std::path::PathBuf,
+    std::{net::IpAddr, path::PathBuf},
     tokio::{
         fs::{File, create_dir_all},
         io::{AsyncReadExt, AsyncWriteExt},
@@ -14,21 +14,30 @@ use {
     },
 };
 
+/// Searches for the first available IPv4 address on common Wi-Fi interface names
 async fn get_local_ip() -> Option<String> {
-    NetworkInterface::show()
-        .ok()?
-        .into_iter()
-        .find(|itf| {
-            let name = itf.name.to_lowercase();
-            name.contains("wlan") || name.contains("eth") || name.contains("en")
-        })
-        .and_then(|itf| {
-            itf.addr
-                .into_iter()
-                .find(|addr| addr.ip().is_ipv4() && !addr.ip().is_loopback())
-                .map(|addr| addr.ip().to_string())
-        })
+    // Retrieve all network interfaces
+    let interfaces = NetworkInterface::show().ok()?;
+
+    for interface in interfaces {
+        let name = interface.name.to_lowercase();
+        
+        // Comprehensive check
+        if name.contains("wlan") || name.contains("wlp") || name.contains("wi-fi") || name.starts_with("en") {
+            for addr in interface.addr {
+        // Filter for IPv4 and ignore loopback with check
+                if let IpAddr::V4(ipv4) = addr.ip() {
+                    if !ipv4.is_loopback() {
+                        return Some(ipv4.to_string());
+                    }
+                }
+            }
+        }
+    }
+None
 }
+
+
 
 pub async fn receive_file(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()> {
     println!("Portal: Initializing  systems...");
