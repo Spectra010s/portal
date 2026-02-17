@@ -1,4 +1,5 @@
 use {
+    crate::discovery::beacon::start_beacon,
     crate::{config::models::PortalConfig, metadata::FileMetadata},
     anyhow::{Context, Result, anyhow},
     bincode::deserialize,
@@ -54,30 +55,56 @@ pub async fn receive_file(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()
         return Err(anyhow!("No port provided and no config found"));
     };
 
+    // Fetching username with load_all
+    let full_cfg = PortalConfig::load_all()
+        .await
+        .context("Failed to load user config")?;
+
+    let username = full_cfg.user.username.ok_or_else(|| {
+        anyhow!("No username found. Please run 'portal config set user.username <name>' first.")
+    })?;
+
+    // Unique session ID for this transfer
+    let node_id = uuid::Uuid::new_v4().to_string();
+
     let new_addr = format!("0.0.0.0:{}", n_port);
 
     let listener = TcpListener::bind(&new_addr)
         .await
         .context("Failed to bind to port")?;
 
-    println!("Portal: crearing wormhole at {:?}", my_ip);
-    println!(
-        "Portal: on the sender machine, run: portal send <file> -a {} -p {}",
-        my_ip, n_port
-    );
+    println!("Portal: creating wormhole at {:?}", my_ip);
+    println!("Portal: Wormhole open for '{:?}'", username);
 
-    println!(
-        "Receiver: Portal open. Waiting for a connection on port {}...",
-        n_port
-    );
+    // NEW: The Tokio Select logic to run Beacon and Listener together
+    let (mut socket, addr) = tokio::select! {
+        // start the beacon
+        _ = start_beacon(username, node_id.clone(), n_port) => {
+          println!("Portal: Beacon active. Waiting for sender...");
+            return Err(anyhow!("Portal: Discovery beacon stopped unexpectedly"));
+        }
+        // wait for the actual TCP connection
+        result = listener.accept() => {
+            result.context("Failed to accept connection")?
+        }
+    };
 
-    let (mut socket, addr) = listener
-        .accept()
-        .await
-        .context("Failed to accept connection")?;
     println!("Receiver: Connection established with {}!", addr);
     println!("Portal: Connected to sender");
     println!("Portal: Waiting for incoming files...");
+
+    // Send ID to Sender so they can verify who we are
+    let id_bytes = node_id.as_bytes();
+    let id_len = id_bytes.len() as u32;
+
+    socket
+        .write_all(&id_len.to_be_bytes())
+        .await
+        .context("Failed to send verification length")?;
+    socket
+        .write_all(id_bytes)
+        .await
+        .context("Failed to send verification ID")?;
 
     // 1. Read the metadata length
     let mut metadata_len_buf = [0u8; 4];
