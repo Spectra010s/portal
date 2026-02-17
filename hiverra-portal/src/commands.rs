@@ -20,7 +20,7 @@ pub enum Commands {
     Send {
         // The file to send
         // PathBuf, so as to hold "File System Object".
-        file: Option<PathBuf>,
+        file: Option<Vec<PathBuf>>,
         /// The IP address of the receiver
         #[arg(short, long)]
         address: Option<String>,
