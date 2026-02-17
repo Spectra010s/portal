@@ -1,11 +1,15 @@
 use serde::{Deserialize, Serialize};
 
-// We 'derive' these traits so Serde knows how to convert this
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TransferManifest {
+    pub files: Vec<FileMetadata>,
+    pub total_size: u64,    
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FileMetadata {
     pub filename: String,
     pub file_size: u64,
-    // so the sender can send a description of some sort
-    // Option allows us to have a description or nothing (None)
+    // description from sender
     pub description: Option<String>,
 }
