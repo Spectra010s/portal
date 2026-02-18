@@ -1,4 +1,5 @@
 name: Android Release
+
 permissions:
   contents: write
 
@@ -13,6 +14,7 @@ jobs:
     defaults:
       run:
         working-directory: hiverra-portal
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,7 +39,7 @@ jobs:
           
           cd dist
           TAR_NAME="hiverra-portal-aarch64-linux-android.tar.gz"
-          tar -cvzf "$TAR_NAME" -C bundle .
+          tar -czf "$TAR_NAME" -C bundle .
           sha256sum "$TAR_NAME" > "$TAR_NAME.sha256"
           cd ..
 
@@ -50,32 +52,15 @@ jobs:
           TAG="${{ github.ref_name }}"
           BINARY_NAME="hiverra-portal-aarch64-linux-android.tar.gz"
           URL="https://github.com/\$REPO/releases/download/\$TAG/\$BINARY_NAME"
-          
+
           echo "Installing portal (\$TAG) for Android..."
 
-          # Check required tools before installing
-          for cmd in curl tar sha256sum; do
-              if ! command -v \$cmd >/dev/null 2>&1; then
-                  echo "\$cmd not found. Installing..."
-                  case "\$cmd" in
-                      sha256sum)
-                          pkg install -y coreutils
-                          ;;
-                      *)
-                          pkg install -y "\$cmd"
-                          ;;
-                  esac
-              fi
-          done
-          
-          TMP_DIR=$(mktemp -d "$PREFIX/tmp/portal-install")
+          TMP_DIR=\$(mktemp -d "\$PREFIX/tmp/portal-install")
           FILE="\$TMP_DIR/hiverra-portal.tar.gz"
 
-          echo "Downloading..."
           curl -sSfL "\$URL" -o "\$FILE"
-
-          echo "Verifying checksum..."
           curl -sSfL "\$URL.sha256" -o "\$TMP_DIR/check.sha256"
+
           EXPECTED_HASH=\$(awk '{print \$1}' "\$TMP_DIR/check.sha256")
           ACTUAL_HASH=\$(sha256sum "\$FILE" | awk '{print \$1}')
 
@@ -88,11 +73,15 @@ jobs:
           mv "\$TMP_DIR/portal" "\$PREFIX/bin/portal"
           chmod +x "\$PREFIX/bin/portal"
           rm -rf "\$TMP_DIR"
+
           echo "Success! Type 'portal' to start."
           EOF
 
+          chmod +x dist/hiverra-portal-android-installer.sh
+
       - name: Wait for cargo-dist Release
-        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           for i in {1..20}; do
             if gh release view ${{ github.ref_name }} > /dev/null 2>&1; then
@@ -101,75 +90,93 @@ jobs:
             fi
             sleep 30
           done
+          echo "Release not found."
           exit 1
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Everything
-        run: gh release upload ${{ github.ref_name }} dist/hiverra-portal-aarch64-linux-android.tar.gz* dist/hiverra-portal-android-installer.sh --clobber
+      - name: Upload Android Artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} \
+            dist/hiverra-portal-aarch64-linux-android.tar.gz \
+            dist/hiverra-portal-aarch64-linux-android.tar.gz.sha256 \
+            dist/hiverra-portal-android-installer.sh \
+            --clobber
+
       - name: Edit Release Body
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ github.ref_name }}
         run: |
-          # Fetch the current release notes
           gh release view "$REF" --json body --jq '.body' > body.md
 
-          # Skip if Android section is already present
-          if grep -q "Android / Termux" body.md; then
-            echo "Android section already exists. Skipping edit."
+          # Skip if already exists
+          if grep -q "Android (Termux)" body.md; then
+            echo "Android section already present."
             exit 0
           fi
 
-          # Create temporary files for clean insertion
-          cat > android_section.md <<'EOF'
+          # Create Android section
+          cat > android_section.md <<EOF
 
-          ### Install prebuilt binaries via shell script (Android / Termux)
+            ### Install prebuilt binaries via shell script (Android / Termux)
+            
+            \`\`\`sh
+            curl --proto '=https' --tlsv1.2 -LsSf \
+              https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-android-installer.sh | sh
+            \`\`\`
+            
+            Works in Termux (aarch64-linux-android target).
+            
+            EOF
 
-          ```sh
-          curl --proto '=https' --tlsv1.2 -LsSf \
-            https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-android-installer.sh | sh
-          ```
+          # Inject AFTER closing npm code fence
+          awk '
+          BEGIN { in_npm=0; fence_count=0 }
 
-          Works in Termux (aarch64-linux-android target).
-          EOF
+          /^### Install via npm/ {
+              in_npm=1
+              print
+              next
+          }
 
-          cat > table_row.md <<'EOF'
-          hiverra-portal-aarch64-linux-android.tar.gz	Android (Termux)	[checksum](https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-aarch64-linux-android.tar.gz.sha256)
-          EOF
+          in_npm && /^```/ {
+              fence_count++
+              print
+              if (fence_count == 2) {
+                  system("cat android_section.md")
+                  in_npm=0
+              }
+              next
+          }
 
-          # Insert Android install section
-          if grep -q "npm install hiverra-portal@" body.md; then
-            # After npm install block
-            sed -i "/npm install hiverra-portal@/r android_section.md" body.md
-          elif grep -q "^Download .*Portal" body.md; then
-            # Before "Download ..." heading + ensure blank line above it
-            sed -i '/^Download .*Portal/i\
-            ' body.md
-            sed -i "/^Download .*Portal/r android_section.md" body.md
-          else
-            # Fallback: append at end with spacing
-            printf '\n\n' >> body.md
-            cat android_section.md >> body.md
+          { print }
+          ' body.md > new_body.md
+
+          mv new_body.md body.md
+
+          # Fallback: if npm section wasn't found
+          if ! grep -q "Android (Termux)" body.md; then
+            awk '
+            /^## Download/ {
+              system("cat android_section.md")
+            }
+            { print }
+            ' body.md > new_body.md
+            mv new_body.md body.md
           fi
 
-          # Insert table row exactly once
-          # First remove any previous (possibly broken) Android row
+          # Remove any previous Android table row
           sed -i '/aarch64-linux-android\.tar\.gz/d' body.md
 
-          if grep -q "x86_64-unknown-linux-gnu\.tar\.xz" body.md; then
-            sed -i "/x86_64-unknown-linux-gnu\.tar\.xz/r table_row.md" body.md
-          elif grep -q "^---" body.md; then
-            sed -i "/^---/r table_row.md" body.md
-          else
-            printf '\n' >> body.md
-            cat table_row.md >> body.md
-          fi
+          # Create Android table row
+          cat > table_row.md <<EOF
+            | [hiverra-portal-aarch64-linux-android.tar.gz](https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-aarch64-linux-android.tar.gz) | Android (Termux) | [checksum](https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-aarch64-linux-android.tar.gz.sha256) |
+            EOF
 
-          # Apply the updated notes
+          # Insert table row after Linux tar.xz entry
+          sed -i "/x86_64-unknown-linux-gnu\.tar\.xz/r table_row.md" body.md
+
           gh release edit "$REF" --notes-file body.md
 
-          # Clean up temp files
           rm -f android_section.md table_row.md
