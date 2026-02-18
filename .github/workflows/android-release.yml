@@ -122,11 +122,9 @@ jobs:
           ### Install prebuilt binaries via shell script (Android / Termux)
             
           \`\`\`sh
-          curl --proto '=https' --tlsv1.2-LsSf \
+          curl -LsSf \
           https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-android-installer.sh | sh
           \`\`\`
-            
-          Works in Termux (aarch64-linux-android target).
            
           EOF
 
