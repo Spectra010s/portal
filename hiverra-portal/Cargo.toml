@@ -1,6 +1,6 @@
 [package]
 name = "hiverra-portal"
-version = "0.9.1"
+version = "0.9.0"
 authors = ["Spectra010s <spectra010s@gmail.com"]
 edition = "2024"
 repository = "https://github.com/Spectra010s/portal" 
