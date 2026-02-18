@@ -1,27 +1,24 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, Error};
 use flate2::read::GzDecoder;
 use inquire::Confirm;
-use reqwest::blocking::Client;
-use self_replace::self_replace;
-use self_update::{
+use { reqwest::blocking::Client,
+self_replace::self_replace,
+self_update::{
     backends::github::Update, cargo_crate_version, update::Release, version::bump_is_greater,
-};
-use std::{io::Cursor, time::Duration};
-use tar::Archive;
-use tempfile::Builder;
-use tokio::task::spawn_blocking;
-use xz2::read::XzDecoder;
+},
+std::{fs::File, time::Duration},
+tar::Archive,
+tempfile::Builder,
+tokio::task::spawn_blocking,
+ xz2::read::XzDecoder};
 
-// Only import these when compiling for Windows
+// Windows-specific imports
 #[cfg(target_os = "windows")]
-use {
-    anyhow::anyhow,
-    self_update::Download,
-    std::{env::temp_dir, fs::File, process::Command},
-};
+use { anyhow::anyhow,
+ std::{env::temp_dir, process::Command}};
 
 pub async fn update_portal() -> Result<()> {
-    // 1. Fetch the latest release
+    // 1. Fetch latest release
     let release = spawn_blocking(|| {
         let latest = Update::configure()
             .repo_owner("Spectra010s")
@@ -31,20 +28,16 @@ pub async fn update_portal() -> Result<()> {
             .build()?
             .get_latest_release()
             .context("Failed to fetch latest release from GitHub")?;
-
-        Ok::<Release, anyhow::Error>(latest)
+        Ok::<Release, Error>(latest)
     })
     .await
     .context("Updating failed")??;
 
     let current_v = cargo_crate_version!();
 
-    // 2. Check if the release is newer
+    // 2. Check if newer
     if bump_is_greater(current_v, &release.version)? {
-        println!(
-            "New version found: {} (Current: v{})",
-            release.version, current_v
-        );
+        println!("New version found: {} (Current: v{})", release.version, current_v);
 
         let proceed = Confirm::new("Portal: Do you want to update?")
             .with_default(true)
@@ -57,24 +50,33 @@ pub async fn update_portal() -> Result<()> {
 
         println!("Portal: Downloading and applying update...");
 
+
+        // Windows update
         #[cfg(target_os = "windows")]
         {
             spawn_blocking(move || -> Result<()> {
                 let tmp_dir = temp_dir();
                 let dest_path = tmp_dir.join("portal_update.msi");
 
-                let source = Download::from_url(
-                    &release
-                        .asset_for("windows", Some("msi"))
-                        .ok_or_else(|| anyhow!("Could not find MSI for Windows"))?
-                        .download_url,
-                );
+                let asset = release
+                    .asset_for("windows", Some("msi"))
+                    .ok_or_else(|| anyhow!("Could not find MSI for Windows"))?;
 
-                let mut dest_file = File::create(&dest_path)?;
-                source.download_to(&mut dest_file)?;
+                let client = Client::builder()
+                    .timeout(Duration::from_secs(300))
+                    .build()?;
+                let mut response = client
+                    .get(&asset.download_url)
+                    .header("Accept", "application/octet-stream")
+                    .header("User-Agent", "portal-updater")
+                    .send()?
+                    .error_for_status()?;
+
+                let mut tmp_file = File::create(&dest_path)?;
+                response.copy_to(&mut tmp_file)?;
+                tmp_file.sync_all()?;
 
                 println!("Portal: Launching installer. This will close the current app...");
-
                 Command::new("msiexec")
                     .arg("/i")
                     .arg(&dest_path)
@@ -88,10 +90,12 @@ pub async fn update_portal() -> Result<()> {
             .context("Portal: Windows update failed")??;
         }
 
+
+        // Non-Windows update (Linux/macOS/Android)
         #[cfg(not(target_os = "windows"))]
         {
             spawn_blocking(move || -> Result<()> {
-                // 3. Determine correct asset for platform
+                // Determine asset
                 let (asset_name, is_gz) = if cfg!(target_os = "android") {
                     ("hiverra-portal-aarch64-linux-android.tar.gz", true)
                 } else if cfg!(target_os = "macos") {
@@ -108,38 +112,35 @@ pub async fn update_portal() -> Result<()> {
                     .asset_for(asset_name, None)
                     .context("Asset not found for this platform")?;
 
-                // 4. Download asset with long timeout
+                // Download with streaming to file
                 let client = Client::builder()
                     .timeout(Duration::from_secs(300))
                     .build()?;
-
-                let response = client
+                let mut response = client
                     .get(&asset.download_url)
                     .header("Accept", "application/octet-stream")
                     .header("User-Agent", "portal-updater")
-                    .send()?;
+                    .send()?
+                    .error_for_status()?;
 
-                if !response.status().is_success() {
-                    anyhow::bail!("Download failed: {}", response.status());
-                }
-
-                let bytes = response.bytes()?;
-                let cursor = Cursor::new(bytes);
-
-                // 5. Create temp dir with portal- prefix
                 let tmp_dir = Builder::new().prefix("portal-").tempdir()?;
+                let tmp_file_path = tmp_dir.path().join(asset_name);
+                let mut tmp_file = File::create(&tmp_file_path)?;
+                response.copy_to(&mut tmp_file)?;
+                tmp_file.sync_all()?;
 
-                // 6. Extract based on archive type
+                // Extract archive
+                let file = File::open(&tmp_file_path)?;
                 if is_gz {
-                    let mut archive = Archive::new(GzDecoder::new(cursor));
+                    let mut archive = Archive::new(GzDecoder::new(file));
                     archive.unpack(tmp_dir.path())?;
                 } else {
-                    let mut archive = Archive::new(XzDecoder::new(cursor));
+                    let mut archive = Archive::new(XzDecoder::new(file));
                     archive.unpack(tmp_dir.path())?;
                 }
 
-                // 7. binary replacement
-                let new_bin = tmp_dir.path().join("hiverra-portal");
+                // Replace binary
+                let new_bin = tmp_dir.path().join("portal");
                 self_replace(&new_bin).context("Binary swap failed")?;
 
                 Ok(())
