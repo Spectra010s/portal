@@ -1,6 +1,6 @@
 use {
     crate::discovery::beacon::start_beacon,
-    crate::{config::models::PortalConfig, metadata::FileMetadata},
+    crate::{config::models::PortalConfig, metadata::TransferManifest},
     anyhow::{Context, Result, anyhow},
     bincode::deserialize,
     home::home_dir,
@@ -21,11 +21,15 @@ async fn get_local_ip() -> Option<String> {
 
     for interface in interfaces {
         let name = interface.name.to_lowercase();
-        
+
         // Comprehensive check
-        if name.contains("wlan") || name.contains("wlp") || name.contains("wi-fi") || name.starts_with("en") {
+        if name.contains("wlan")
+            || name.contains("wlp")
+            || name.contains("wi-fi")
+            || name.starts_with("en")
+        {
             for addr in interface.addr {
-        // Filter for IPv4 and ignore loopback with check
+                // Filter for IPv4 and ignore loopback with check
                 if let IpAddr::V4(ipv4) = addr.ip() {
                     if !ipv4.is_loopback() {
                         return Some(ipv4.to_string());
@@ -34,10 +38,8 @@ async fn get_local_ip() -> Option<String> {
             }
         }
     }
-None
+    None
 }
-
-
 
 pub async fn receive_file(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()> {
     println!("Portal: Initializing  systems...");
@@ -82,10 +84,10 @@ pub async fn receive_file(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()
         .await
         .context("Failed to bind to port")?;
 
-    println!("Portal: creating wormhole at {:?}", my_ip);
-    println!("Portal: Wormhole open for '{:?}'", username);
+    println!("Portal: Creating wormhole at {:?}", my_ip);
+    println!("Portal: Wormhole open for {:?}", username);
 
-    // NEW: The Tokio Select logic to run Beacon and Listener together
+    // The Tokio Select logic to run Beacon and Listener together
     let (mut socket, addr) = tokio::select! {
         // start the beacon
         _ = start_beacon(username, node_id.clone(), n_port) => {
@@ -98,7 +100,7 @@ pub async fn receive_file(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()
         }
     };
 
-    println!("Receiver: Connection established with {}!", addr);
+    println!("Portal: Connection established with {}!", addr);
     println!("Portal: Connected to sender");
     println!("Portal: Waiting for incoming files...");
 
@@ -115,33 +117,33 @@ pub async fn receive_file(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()
         .await
         .context("Failed to send verification ID")?;
 
-    // 1. Read the metadata length
-    let mut metadata_len_buf = [0u8; 4];
+    //  Read the metadata length
+    let mut manifest_len_buf = [0u8; 4];
     socket
-        .read_exact(&mut metadata_len_buf)
+        .read_exact(&mut manifest_len_buf)
         .await
-        .context("Failed to read metadata length")?; // Read exactly 4 bytes
+        .context("Failed to read manifest length")?;
 
-    let metadata_len = u32::from_be_bytes(metadata_len_buf) as usize;
+    let manifest_len = u32::from_be_bytes(manifest_len_buf) as usize;
 
-    // 2. Read the Metadata Blob
+    //  Read the Metadata Blob
 
-    let mut metadata_buf = vec![0u8; metadata_len];
+    let mut manifest_buf = vec![0u8; manifest_len];
     socket
-        .read_exact(&mut metadata_buf)
+        .read_exact(&mut manifest_buf)
         .await
-        .context("Failed to read metadata blob")?;
+        .context("Failed to read manifest blob")?;
 
-    // 3 Turn those bytes into our Struct
-    let file_info: FileMetadata =
-        deserialize(&metadata_buf).context("Failed to deserialize metadata")?;
+    // Deserialize the manifest
+    let file_manifest: TransferManifest =
+        deserialize(&manifest_buf).context("Failed to deserialize manifest")?;
+    println!("Portal: Manifest received.");
+    let files_infos = &file_manifest.files;
+    let total_files = file_manifest.total_files;
+    let description = &file_manifest.description;
 
-    // Read the name and size and ?description
-    let filename = &file_info.filename;
-    let file_size = file_info.file_size;
-    let description = &file_info.description;
-
-    println!("Receiving file: {} ({} bytes)", filename, file_size);
+    // Print basic info for the user
+    println!("Portal: Incoming transfer - {} file(s)", total_files);
 
     if let Some(desc) = description {
         println!("Portal: Sender left a note: \"{}\"", desc);
@@ -149,8 +151,7 @@ pub async fn receive_file(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()
         println!("Portal: No description provided for this transfer.");
     }
 
-    // 4. Create the file on disk
-
+    // Determine the directory to save files
     // Use CLI-provided path, or config, or prompt user if neither exists
     let target_dir: PathBuf = if let Some(dir) = dir {
         dir.clone()
@@ -189,40 +190,55 @@ pub async fn receive_file(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()
 
         PathBuf::from(dir_string)
     };
-
-    //  Create the directory if not given
-    create_dir_all(&target_dir).await?;
-
-    //  Create the file inside that directory
-    let file_path = target_dir.join(filename);
-    let mut out_file = File::create(&file_path)
+    // Ensure the directory exists
+    create_dir_all(&target_dir)
         .await
-        .context("Failed to create file on disk")?;
+        .context("Failed to create target directory")?;
 
-    // 5. The loop to actually save the bytes
-    let mut buffer = [0u8; 8192];
-    let mut received_so_far = 0;
+    //  Loop through each file in the manifest
+    for (index, file_info) in files_infos.iter().enumerate() {
+        let filename = &file_info.filename;
+        let file_size = file_info.file_size;
 
-    while received_so_far < file_size {
-        let bytes_read = socket
-            .read(&mut buffer)
+        println!(
+            "Portal: Receiving file {} of {}: '{}' ({} bytes)",
+            index + 1,
+            total_files,
+            filename,
+            file_size
+        );
+
+        let file_path = target_dir.join(filename);
+        let mut out_file = File::create(&file_path)
             .await
-            .context("Network read error during file transfer")?;
-        if bytes_read == 0 {
-            break;
-        } // Sender hung up
+            .context("Failed to create file on disk")?;
 
-        out_file
-            .write_all(&buffer[..bytes_read])
-            .await
-            .context("Disk write error")?;
-        received_so_far += bytes_read as u64;
+        let mut buffer = [0u8; 8192];
+        let mut received_so_far = 0;
+
+        while received_so_far < file_size {
+            let bytes_read = socket
+                .read(&mut buffer)
+                .await
+                .context("Network read error during file transfer")?;
+            if bytes_read == 0 {
+                break; // Sender hung up
+            }
+
+            out_file
+                .write_all(&buffer[..bytes_read])
+                .await
+                .context("Disk write error")?;
+
+            received_so_far += bytes_read as u64;
+        }
+
+        println!("Portal: File '{}' received successfully!", filename);
     }
 
     println!(
-        "Portal: Transfer complete! Saved as '{}' to '{}'",
-        filename,
-        &file_path.display()
+        "Portal: All file(s) have been received successfully! and saved to '{}'",
+        target_dir.display()
     );
 
     Ok(())
