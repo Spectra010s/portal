@@ -119,16 +119,16 @@ jobs:
           # Create Android section
           cat > android_section.md <<EOF
 
-            ### Install prebuilt binaries via shell script (Android / Termux)
+          ### Install prebuilt binaries via shell script (Android / Termux)
             
-            \`\`\`sh
-            curl --proto '=https' --tlsv1.2 -LsSf \
-              https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-android-installer.sh | sh
-            \`\`\`
+          \`\`\`sh
+          curl --proto '=https' --tlsv1.2-LsSf \
+          https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-android-installer.sh | sh
+          \`\`\`
             
-            Works in Termux (aarch64-linux-android target).
-            
-            EOF
+          Works in Termux (aarch64-linux-android target).
+           
+          EOF
 
           # Inject AFTER closing npm code fence
           awk '
@@ -171,8 +171,8 @@ jobs:
 
           # Create Android table row
           cat > table_row.md <<EOF
-            | [hiverra-portal-aarch64-linux-android.tar.gz](https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-aarch64-linux-android.tar.gz) | Android (Termux) | [checksum](https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-aarch64-linux-android.tar.gz.sha256) |
-            EOF
+          | [hiverra-portal-aarch64-linux-android.tar.gz](https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-aarch64-linux-android.tar.gz) | Android (Termux) | [checksum](https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-aarch64-linux-android.tar.gz.sha256) |
+          EOF
 
           # Insert table row after Linux tar.xz entry
           sed -i "/x86_64-unknown-linux-gnu\.tar\.xz/r table_row.md" body.md
