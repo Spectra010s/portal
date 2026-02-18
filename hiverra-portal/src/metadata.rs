@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferManifest {
     pub files: Vec<FileMetadata>,
-    pub total_size: u64,
+    pub total_files: u32,
     // description from sender to receiver
     pub description: Option<String>,
 }

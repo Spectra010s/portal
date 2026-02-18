@@ -4,7 +4,6 @@ use {
             list::list_config, set::set_config, setup::handle_setup, show::show_config_value,
         },
         receiver::receive_file,
-        select::select_file_to_send,
         sender::send_file,
         update::update_portal,
     },
@@ -18,8 +17,7 @@ use {
 pub enum Commands {
     /// Send a file
     Send {
-        // The file to send
-        // PathBuf, so as to hold "File System Object".
+        /// The files or folders to send. If empty, opens the interactive picker.
         file: Option<Vec<PathBuf>>,
         /// The IP address of the receiver
         #[arg(short, long)]
@@ -78,19 +76,8 @@ impl Commands {
                 port,
                 to,
             } => {
-                // Determine which path to use
-                let path_to_send = match file {
-                    Some(path) => path.clone(),
-                    None => {
-                        if let Ok(Some(selected)) = select_file_to_send().await {
-                            PathBuf::from(selected)
-                        } else {
-                            return Ok(());
-                        }
-                    }
-                };
-
-                send_file(&path_to_send, &address, &port, &to)
+                // send file or files
+                send_file(&file, &address, &port, &to)
                     .await
                     .context("Failed to execute Send command")?;
             }
