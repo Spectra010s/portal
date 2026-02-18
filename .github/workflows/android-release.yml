@@ -55,8 +55,8 @@ jobs:
 
           echo "Installing portal (\$TAG) for Android..."
 
-          TMP_DIR=\$(mktemp -d "\$PREFIX/tmp/portal-install")
           FILE="\$TMP_DIR/hiverra-portal.tar.gz"
+          TMP_DIR=\$(mktemp -d "\$PREFIX/tmp/portal-install-XXXXXX")
 
           curl -sSfL "\$URL" -o "\$FILE"
           curl -sSfL "\$URL.sha256" -o "\$TMP_DIR/check.sha256"
