@@ -29,6 +29,9 @@ pub enum Commands {
         /// If omitted, Portal will prompt you for a name.
         #[arg(short, long, value_name = "USERNAME")]
         to: Option<String>,
+        /// Send folder recursively
+        #[arg(short, long, value_name = "FOLDER")]
+        recursive: bool,
     },
     /// Receive a file
     Receive {
@@ -75,9 +78,10 @@ impl Commands {
                 address,
                 port,
                 to,
+                recursive,
             } => {
                 // send file or files
-                send_file(&file, &address, &port, &to)
+                send_file(&file, &address, &port, &to, &recursive)
                     .await
                     .context("Failed to execute Send command")?;
             }
