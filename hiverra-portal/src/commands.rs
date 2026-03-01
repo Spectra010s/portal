@@ -3,8 +3,8 @@ use {
         config::{
             list::list_config, set::set_config, setup::handle_setup, show::show_config_value,
         },
-        receiver::receive_file,
-        sender::send_file,
+        receiver::start_receiver,
+        sender::start_send,
         update::update_portal,
     },
     anyhow::{Context, Result},
@@ -81,13 +81,13 @@ impl Commands {
                 recursive,
             } => {
                 // send file or files
-                send_file(&file, &address, &port, &to, &recursive)
+                start_send(&file, &address, &port, &to, &recursive)
                     .await
                     .context("Failed to execute Send command")?;
             }
             Commands::Receive { port, dir } => {
                 // Pass the error up if receiving fails
-                receive_file(*port, &dir)
+                start_receiver(*port, &dir)
                     .await
                     .context("Failed to execute Receive command")?;
             }

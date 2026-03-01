@@ -24,7 +24,7 @@ Here is the strategic breakdown of the 6 issues and which will be done first:
 4. Multiple File Support (New) Why: This is a structural change to the protocol. Before we can show a progress bar or retry a connection, the pipe needs to know if it's carrying one file or a hundred.
 
 - Goal: Allow the sender to pass a list of paths.
-- Impact: Requires a "Manifest" header (JSON) sent over TCP before the data starts, so the receiver knows how many files to expect and their sizes.
+- Impact: Requires a "Manifest" header (JSON) sent over TCP before the data starts, so the receiver knows how many files to expect and their sizes. [X]
 
 5. Folder Recursive Sending (New)
    Why: Sending a folder is just "Multiple Files" with directory logic.
