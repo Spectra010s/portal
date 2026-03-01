@@ -3,8 +3,8 @@ use {
         config::{
             list::list_config, set::set_config, setup::handle_setup, show::show_config_value,
         },
-        receiver::receive_file,
-        sender::send_file,
+        receiver::start_receiver,
+        sender::start_send,
         update::update_portal,
     },
     anyhow::{Context, Result},
@@ -29,6 +29,9 @@ pub enum Commands {
         /// If omitted, Portal will prompt you for a name.
         #[arg(short, long, value_name = "USERNAME")]
         to: Option<String>,
+        /// Send folder recursively
+        #[arg(short, long, value_name = "FOLDER")]
+        recursive: bool,
     },
     /// Receive a file
     Receive {
@@ -75,15 +78,16 @@ impl Commands {
                 address,
                 port,
                 to,
+                recursive,
             } => {
                 // send file or files
-                send_file(&file, &address, &port, &to)
+                start_send(&file, &address, &port, &to, &recursive)
                     .await
                     .context("Failed to execute Send command")?;
             }
             Commands::Receive { port, dir } => {
                 // Pass the error up if receiving fails
-                receive_file(*port, &dir)
+                start_receiver(*port, &dir)
                     .await
                     .context("Failed to execute Receive command")?;
             }
