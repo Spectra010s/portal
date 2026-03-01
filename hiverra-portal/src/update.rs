@@ -1,21 +1,25 @@
-use anyhow::{Context, Result, Error};
+use anyhow::{Context, Error, Result};
 use flate2::read::GzDecoder;
 use inquire::Confirm;
-use { reqwest::blocking::Client,
-self_replace::self_replace,
-self_update::{
-    backends::github::Update, cargo_crate_version, update::Release, version::bump_is_greater,
-},
-std::{fs::File, time::Duration},
-tar::Archive,
-tempfile::Builder,
-tokio::task::spawn_blocking,
- xz2::read::XzDecoder};
+use {
+    reqwest::blocking::Client,
+    self_replace::self_replace,
+    self_update::{
+        backends::github::Update, cargo_crate_version, update::Release, version::bump_is_greater,
+    },
+    std::{fs::File, time::Duration},
+    tar::Archive,
+    tempfile::Builder,
+    tokio::task::spawn_blocking,
+    xz2::read::XzDecoder,
+};
 
 // Windows-specific imports
 #[cfg(target_os = "windows")]
-use { anyhow::anyhow,
- std::{env::temp_dir, process::Command}};
+use {
+    anyhow::anyhow,
+    std::{env::temp_dir, process::Command},
+};
 
 pub async fn update_portal() -> Result<()> {
     // 1. Fetch latest release
@@ -37,7 +41,10 @@ pub async fn update_portal() -> Result<()> {
 
     // 2. Check if newer
     if bump_is_greater(current_v, &release.version)? {
-        println!("New version found: {} (Current: v{})", release.version, current_v);
+        println!(
+            "New version found: {} (Current: v{})",
+            release.version, current_v
+        );
 
         let proceed = Confirm::new("Portal: Do you want to update?")
             .with_default(true)
@@ -49,7 +56,6 @@ pub async fn update_portal() -> Result<()> {
         }
 
         println!("Portal: Downloading and applying update...");
-
 
         // Windows update
         #[cfg(target_os = "windows")]
@@ -89,7 +95,6 @@ pub async fn update_portal() -> Result<()> {
             .await
             .context("Portal: Windows update failed")??;
         }
-
 
         // Non-Windows update (Linux/macOS/Android)
         #[cfg(not(target_os = "windows"))]

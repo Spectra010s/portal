@@ -1,56 +1,112 @@
+mod send_dir;
+mod send_file;
+
 use {
     crate::{
         discovery::listener::find_receiver,
-        metadata::{FileMetadata, TransferManifest},
+        metadata::{
+            DirectoryMetadata, FileMetadata, GlobalTransferManifest, ItemKind, TransferHeader,
+            TransferItem,
+        },
         select::select_files_to_send,
     },
-    anyhow::{Context, Result, anyhow},
+    anyhow::{Context, Result, anyhow, Error},
     bincode::serialize,
     inquire::{Confirm, Text},
     std::path::PathBuf,
     std::time::Duration,
     tokio::{
-        fs::{File, metadata},
-        io::{AsyncReadExt, AsyncWriteExt, BufReader},
+        fs::metadata,
+        io::{AsyncReadExt, AsyncWriteExt},
         net::TcpStream,
+        task,
         time::timeout,
     },
+    send_dir::send_directory,
+    send_file::send_file,
+    walkdir::WalkDir,
 };
 
-async fn create_metadata(file: &PathBuf) -> Result<FileMetadata> {
-    let attr = metadata(file).await?;
-    let name = file
+
+async fn create_file_metadata(path: &PathBuf) -> Result<FileMetadata> {
+    let attr = metadata(path).await?;
+
+    let filename = path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("unknown_file")
         .to_string();
 
     Ok(FileMetadata {
-        filename: name,
+        filename,
         file_size: attr.len(),
     })
 }
 
-async fn create_tf_manifest(files: &[PathBuf], desc: Option<String>) -> Result<TransferManifest> {
-    let mut metadata_list = Vec::new();
+async fn create_directory_metadata(dir: &PathBuf) -> Result<DirectoryMetadata> {
+    let dir_clone = dir.clone();
 
-    for file in files {
-        let meta = create_metadata(file).await?;
-        metadata_list.push(meta);
-    }
+    // using blocking thread bcus of walkdir
+    let result = task::spawn_blocking(move || {
+        let mut files_meta = Vec::new();
+        let mut total_size = 0u64;
 
-    Ok(TransferManifest {
-        total_files: metadata_list.len() as u32,
-        files: metadata_list,
+        for entry in WalkDir::new(&dir_clone)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            if entry.file_type().is_file() {
+                let path = entry.path().to_path_buf();
+
+                let attr = std::fs::metadata(&path)?;
+                let size = attr.len();
+                total_size += size;
+
+                // Keep the folder structure relative to the parent
+                let rel_path = path.strip_prefix(&dir_clone)?.to_string_lossy().to_string();
+
+                files_meta.push(FileMetadata {
+                    filename: rel_path,
+                    file_size: size,
+                });
+            }
+        }
+
+        Ok::<(Vec<FileMetadata>, u64), Error>((files_meta, total_size))
+    })
+    .await??;
+
+    let (files_meta, total_size) = result;
+
+    Ok(DirectoryMetadata {
+        dirname: dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown_dir")
+            .to_string(),
+        total_size,
+        files: files_meta,
+    })
+}
+
+pub async fn create_global_transfer_manifest(
+    files: u32,
+    dirs: u32,
+    desc: Option<String>,
+) -> Result<GlobalTransferManifest> {
+    Ok(GlobalTransferManifest {
+        total_files: files,
+        total_directories: dirs,
         description: desc,
     })
 }
 
-pub async fn send_file(
+pub async fn start_send(
     file: &Option<Vec<PathBuf>>,
     addr: &Option<String>,
     port: &u16,
     to: &Option<String>,
+    recursive: &bool,
 ) -> Result<()> {
     let files = match file {
         Some(path) => path.clone(),
@@ -65,30 +121,20 @@ pub async fn send_file(
 
     for file in &files {
         if !file.exists() {
-            return Err(anyhow!("File '{}' does not exist", file.display()));
-        }
-
-        if file.is_dir() {
             return Err(anyhow!(
-                "'{}' is a directory. Portal only supports single files right now.",
+                "File or directory '{}' does not exist",
                 file.display()
             ));
         }
+        if file.is_dir() {
+            if !recursive {
+                return Err(anyhow!(
+                    "-r not specified; omitting directory '{}'",
+                    file.display(),
+                ));
+            }
+        }
     }
-
-    //  Ask  user if to add a description
-    let user_desc = if Confirm::new("Portal: Add description for this transfer?")
-        .with_default(false)
-        .prompt()?
-    {
-        Some(Text::new("Portal: Enter transfer description:").prompt()?)
-    } else {
-        None
-    };
-
-    let manifest = create_tf_manifest(&files, user_desc)
-        .await
-        .context("Failed to build transfer manifest")?;
 
     //  New username discovery connection Logic
     let (target_ip, target_node_id, target_port) = if let Some(direct_addr) = addr {
@@ -113,10 +159,6 @@ pub async fn send_file(
         let (ip, id, p) = discovery_result;
         (ip, Some(id), p)
     };
-
-    // Tsart the serialization of the manifest
-    let encoded_manifest = serialize(&manifest).context("Failed to serialize manifest")?;
-    let manifest_len = encoded_manifest.len() as u32;
 
     let r_addr = format!("{}:{}", target_ip, target_port);
     println!("Portal: Connecting to {}...", r_addr);
@@ -149,67 +191,98 @@ pub async fn send_file(
         );
     }
 
-    println!(
-        "Portal: Preparing to send {} file(s)...",
-        manifest.total_files
-    );
+    //  Ask  user if to add a description
+    let user_desc = if Confirm::new("Portal: Add description for this transfer?")
+        .with_default(false)
+        .prompt()?
+    {
+        Some(Text::new("Portal: Enter transfer description:").prompt()?)
+    } else {
+        None
+    };
 
-    if let Some(d) = &manifest.description {
+    //  Collect all files and directories
+    let mut items_to_send: Vec<(PathBuf, TransferItem)> = Vec::new();
+
+    for path in &files {
+        if path.is_dir() {
+            let dir_meta = create_directory_metadata(path).await?;
+            items_to_send.push((path.clone(), TransferItem::Directory(dir_meta)));
+        } else {
+            let file_meta = create_file_metadata(path).await?;
+            items_to_send.push((path.clone(), TransferItem::File(file_meta)));
+        }
+    }
+
+    let (file_items, dir_items) = items_to_send
+        .iter()
+        .fold((0u32, 0u32), |(f, d), (_, item)| match item {
+            TransferItem::File(_) => (f + 1, d),
+            TransferItem::Directory(_) => (f, d + 1),
+        });
+
+    //  Create global manifest
+    let global_manifest = create_global_transfer_manifest(file_items, dir_items, user_desc).await?;
+
+    // Serialize and send global manifest
+    let encoded_global = serialize(&global_manifest)?;
+    stream
+        .write_all(&(encoded_global.len() as u32).to_be_bytes())
+        .await?;
+    stream.write_all(&encoded_global).await?;
+
+    println!("Portal: Global Manifest sent.");
+
+    if let Some(d) = &global_manifest.description {
         println!("Portal: Note: {}", d);
     }
-
-    // Stream the manifest to the Pipe
-    stream
-        .write_all(&manifest_len.to_be_bytes())
-        .await
-        .context("Failed to send manifest length")?;
-    stream
-        .write_all(&encoded_manifest)
-        .await
-        .context("Failed to send manifest")?;
-
-    println!("Portal: Manifest sent.");
-
     // Send files sequentially
-    for (index, (path, file_info)) in files.iter().zip(&manifest.files).enumerate() {
-        println!(
-            "Portal: Preparing to send '{}' ({} bytes)...",
-            file_info.filename, file_info.file_size
-        );
-        println!(
-            "Portal: Sending file {} of {}",
-            index + 1,
-            manifest.total_files
-        );
+    let total_items = items_to_send.len();
 
-        let file_handle = File::open(path)
-            .await
-            .context("We found the file, but couldn't open it (it might be locked).")?;
+    println!("Portal: Preparing to send {} items(s)...", total_items);
 
-        println!("Portal: Connection established to the file system.");
+    // Send files snd directories
+    for (index, (path, item)) in items_to_send.iter().enumerate() {
+        let kind = match item {
+            TransferItem::File(_) => ItemKind::File,
+            TransferItem::Directory(_) => ItemKind::Directory,
+        };
 
-        let mut reader = BufReader::new(file_handle);
-        println!("Portal: Buffer initialized and ready for streaming.");
+    
 
-        let mut buffer = [0u8; 8192];
+        let header = TransferHeader { kind };
+        let encoded_header = serialize(&header)?;
+        stream
+            .write_all(&(encoded_header.len() as u32).to_be_bytes())
+            .await?;
+        stream.write_all(&encoded_header).await?;
+        println!("Portal: Sending header: {:?}", header.kind);
 
-        loop {
-            let bytes_read = reader
-                .read(&mut buffer)
-                .await
-                .context("Failed to read file")?;
-            if bytes_read == 0 {
-                break;
+        match item {
+            TransferItem::File(file_meta) => {
+                println!(
+                    "Portal: Preparing to send '{}' ({} bytes)...",
+                    file_meta.filename, file_meta.file_size
+                );
+                println!("Portal: Sending item {} of {}", index + 1, total_items);
+                send_file(&mut stream, path, file_meta).await?;
+                println!("Portal: File '{}' sent successfully!", file_meta.filename);
             }
-            stream
-                .write_all(&buffer[..bytes_read])
-                .await
-                .context("Failed to send file")?;
+            TransferItem::Directory(dir_meta) => {
+                println!(
+                    "Portal: Preparing to send directory '{}' ({} bytes)...",
+                    dir_meta.dirname, dir_meta.total_size
+                );
+                println!("Portal: Sending item {} of {}", index + 1, total_items);
+                send_directory(&mut stream, path, dir_meta).await?;
+                println!(
+                    "Portal: Directory '{}' sent successfully!",
+                    dir_meta.dirname
+                );
+            }
         }
-
-        println!("Portal: File '{}' sent successfully!", file_info.filename,);
     }
-    println!("Portal: All file(s) have been sent successfully!");
 
+    println!("Portal: All file(s) have been sent successfully!");
     Ok(())
 }
