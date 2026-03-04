@@ -19,13 +19,6 @@ eula = false
 [[bin]]
 name = "portal"
 path = "src/main.rs"
-[[bin]]
-name = "tar-receiver"
-path = "prototypes/tar-stream/receiver/main.rs"
-[[bin]]
-name = "tar-sender"
-path = "prototypes/tar-stream/sender/main.rs"
-
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
@@ -50,8 +43,8 @@ serde_json = "1.0.149"
 socket2 = "0.6.2"
 uuid = { version = "1.21.0", features = ["v4"] }
 walkdir = "2.5.0"
-tokio-tar = "0.3"
 async-compression = { version = "0.4", features = ["tokio", "gzip"] }
+astral-tokio-tar = "0.5.6"
 
 
 # The profile that 'dist' will build with

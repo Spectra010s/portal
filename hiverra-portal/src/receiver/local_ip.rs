@@ -1,8 +1,6 @@
 use {
- 
     network_interface::{NetworkInterface, NetworkInterfaceConfig},
-    std::net::IpAddr
-    
+    std::net::IpAddr,
 };
 
 /// Searches for the first available IPv4 address on common Wi-Fi interface names

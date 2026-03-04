@@ -16,14 +16,15 @@ pub async fn send_directory(
     stream: &mut TcpStream,
     base_path: &PathBuf,
     meta: &DirectoryMetadata,
-) -> Result<()> {
+) -> Result<TcpStream> {
     // Serialize and send directory metadata first
     let encoded_meta = serialize(meta)?;
+    
     stream.write_all(&(encoded_meta.len() as u32).to_be_bytes()).await?;
     stream.write_all(&encoded_meta).await?;
 
     // Wrap TCP stream in gzip encoder
-    let compressor = GzipEncoder::new(stream);
+    let compressor = GzipEncoder::new(&stream);
     let mut builder = Builder::new(compressor);
 
     // Append all files from metadata
@@ -42,5 +43,5 @@ pub async fn send_directory(
 
     // Finish tar and gzip
     builder.into_inner().await?.shutdown().await?;
-    Ok(())
+    Ok(stream)
 }

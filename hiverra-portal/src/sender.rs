@@ -1,18 +1,15 @@
-mod send_dir;
-mod send_file;
+mod send_item;
 
 use {
     crate::{
         discovery::listener::find_receiver,
-        metadata::{
-            DirectoryMetadata, FileMetadata, GlobalTransferManifest, ItemKind, TransferHeader,
-            TransferItem,
-        },
+        metadata::{DirectoryMetadata, FileMetadata, GlobalTransferManifest, TransferItem},
         select::select_files_to_send,
     },
-    anyhow::{Context, Result, anyhow, Error},
+    anyhow::{Context, Error, Result, anyhow},
     bincode::serialize,
     inquire::{Confirm, Text},
+    send_item::send_item,
     std::path::PathBuf,
     std::time::Duration,
     tokio::{
@@ -22,11 +19,8 @@ use {
         task,
         time::timeout,
     },
-    send_dir::send_directory,
-    send_file::send_file,
     walkdir::WalkDir,
 };
-
 
 async fn create_file_metadata(path: &PathBuf) -> Result<FileMetadata> {
     let attr = metadata(path).await?;
@@ -51,10 +45,7 @@ async fn create_directory_metadata(dir: &PathBuf) -> Result<DirectoryMetadata> {
         let mut files_meta = Vec::new();
         let mut total_size = 0u64;
 
-        for entry in WalkDir::new(&dir_clone)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
+        for entry in WalkDir::new(&dir_clone).into_iter().filter_map(|e| e.ok()) {
             if entry.file_type().is_file() {
                 let path = entry.path().to_path_buf();
 
@@ -236,51 +227,21 @@ pub async fn start_send(
     if let Some(d) = &global_manifest.description {
         println!("Portal: Note: {}", d);
     }
-    // Send files sequentially
+    // get the length of items to send
     let total_items = items_to_send.len();
 
     println!("Portal: Preparing to send {} items(s)...", total_items);
 
-    // Send files snd directories
-    for (index, (path, item)) in items_to_send.iter().enumerate() {
-        let kind = match item {
-            TransferItem::File(_) => ItemKind::File,
-            TransferItem::Directory(_) => ItemKind::Directory,
-        };
+    // Start with the initial stream
+    let mut current_stream = stream;
 
-    
+    for (index, (path, item)) in items_to_send.into_iter().enumerate() {
+        println!("Portal: Sending item {} of {}", index + 1, total_items);
 
-        let header = TransferHeader { kind };
-        let encoded_header = serialize(&header)?;
-        stream
-            .write_all(&(encoded_header.len() as u32).to_be_bytes())
-            .await?;
-        stream.write_all(&encoded_header).await?;
-        println!("Portal: Sending header: {:?}", header.kind);
-
-        match item {
-            TransferItem::File(file_meta) => {
-                println!(
-                    "Portal: Preparing to send '{}' ({} bytes)...",
-                    file_meta.filename, file_meta.file_size
-                );
-                println!("Portal: Sending item {} of {}", index + 1, total_items);
-                send_file(&mut stream, path, file_meta).await?;
-                println!("Portal: File '{}' sent successfully!", file_meta.filename);
-            }
-            TransferItem::Directory(dir_meta) => {
-                println!(
-                    "Portal: Preparing to send directory '{}' ({} bytes)...",
-                    dir_meta.dirname, dir_meta.total_size
-                );
-                println!("Portal: Sending item {} of {}", index + 1, total_items);
-                send_directory(&mut stream, path, dir_meta).await?;
-                println!(
-                    "Portal: Directory '{}' sent successfully!",
-                    dir_meta.dirname
-                );
-            }
-        }
+        // send either the file or directory
+        current_stream = send_item(current_stream, path, item)
+            .await
+            .context("Failed to stream item as tarball")?;
     }
 
     println!("Portal: All file(s) have been sent successfully!");

@@ -10,11 +10,7 @@ pub async fn select_files_to_send() -> Result<Option<Vec<PathBuf>>> {
     let mut files = Vec::new();
 
     while let Ok(Some(entry)) = entries.next_entry().await {
-        if let Ok(meta) = entry.metadata().await {
-            if meta.is_file() {
-                files.push(entry.path());
-            }
-        }
+        files.push(entry.path());
     }
 
     if files.is_empty() {

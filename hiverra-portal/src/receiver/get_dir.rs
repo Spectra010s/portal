@@ -1,15 +1,16 @@
-  use {
-    crate::config::models::PortalConfig, 
+
+use {
+    crate::config::models::PortalConfig,
     anyhow::{Context, Result, anyhow},
     home::home_dir,
     inquire::Text,
     std::path::PathBuf,
-    tokio::fs::create_dir_all
+    tokio::fs::create_dir_all,
 };
 
 // Use CLI-provided path, or config, or prompt user if neither exists
- pub async fn get_target_dir(dir: &Option<PathBuf>) -> Result<PathBuf> {
- let target_dir = if let Some(dir) = dir {
+pub async fn get_target_dir(dir: &Option<PathBuf>) -> Result<PathBuf> {
+    let target_dir = if let Some(dir) = dir {
         dir.clone()
     } else if let Some(cfg) = PortalConfig::load_or_return().await? {
         if let Some(d) = &cfg.storage.download_dir {
@@ -50,5 +51,5 @@
     create_dir_all(&target_dir)
         .await
         .context("Failed to create target directory")?;
-        Ok(target_dir)
+    Ok(target_dir)
 }

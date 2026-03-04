@@ -1,34 +1,25 @@
-mod local_ip;
-mod receiving_file;
-mod receive_dir;
 mod get_dir;
+mod local_ip;
+mod receive_item;
 
 use {
     crate::{
-    discovery::beacon::start_beacon,
-    config::models::PortalConfig, 
-    metadata::{
-            DirectoryMetadata, FileMetadata, GlobalTransferManifest, ItemKind, TransferHeader,
-            
-        },
+        config::models::PortalConfig,
+        discovery::beacon::start_beacon,
+        metadata::{GlobalTransferManifest, TransferItem},
     },
     anyhow::{Context, Result, anyhow},
     bincode::deserialize,
-    uuid::Uuid,
-    
-    
+    get_dir::get_target_dir,
+    local_ip::get_local_ip,
+    receive_item::receive_item,
     std::path::PathBuf,
     tokio::{
-        
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpListener,
     },
-    local_ip::get_local_ip,
-    receiving_file::receive_file,
-    receive_dir::receive_directory,
-    get_dir::get_target_dir,
+    uuid::Uuid,
 };
-
 
 pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()> {
     println!("Portal: Initializing  systems...");
@@ -106,9 +97,7 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
         .await
         .context("Failed to send verification ID")?;
 
-
-///// new funtion receiving begins
-
+    ///// new funtion receiving begins
 
     //  Read the metadata length
     let mut global_manifest_len_buf = [0u8; 4];
@@ -135,8 +124,7 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     let total_files = global_manifest.total_files;
     let description = &global_manifest.description;
 
-
-let total_items = total_files + total_directories;
+    let total_items = total_files + total_directories;
 
     // Print basic info for the user
     println!("Portal: Incoming transfer - {} file(s)", total_items);
@@ -148,62 +136,36 @@ let total_items = total_files + total_directories;
     }
 
     // Determine the directory to save files
-  let target_dir = get_target_dir(&dir).await?;
+    let target_dir = get_target_dir(&dir).await?;
 
-///// now to receive file or directories function
+    // receive file or directories
+    // Loop through each file in the manifest
+    for index in 0..total_items {
+        // Read the actual Metadata Enum (TransferItem)
+        let mut i_len_buf = [0u8; 4];
+        socket.read_exact(&mut i_len_buf).await?;
+        let i_len = u32::from_be_bytes(i_len_buf) as usize;
+        let mut i_buf = vec![0u8; i_len];
+        socket.read_exact(&mut i_buf).await?;
+        let item: TransferItem = deserialize(&i_buf)?;
 
-    //  Loop through each file in the manifest
+        // Extract everything once
+        let (item_name, item_size, is_dir) = match &item {
+            TransferItem::File(m) => (&m.filename, m.file_size, false),
+            TransferItem::Directory(m) => (&m.dirname, m.total_size, true),
+        };
 
-for index in 0..total_items {
+        println!(
+            "Portal: Receiving item {} of {}: '{}' ({} bytes)",
+            index + 1,
+            total_items,
+            item_name,
+            item_size
+        );
 
-    let mut h_len_buf = [0u8; 4];
-    socket.read_exact(&mut h_len_buf).await?;
-    let h_len = u32::from_be_bytes(h_len_buf) as usize;
-    let mut h_buf = vec![0u8; h_len];
-    socket.read_exact(&mut h_buf).await?;
-    let header: TransferHeader = deserialize(&h_buf)?;
-
-    match header.kind {
-        ItemKind::File => {
-
-            let mut f_len_buf = [0u8; 4];
-            socket.read_exact(&mut f_len_buf).await?;
-            let f_len = u32::from_be_bytes(f_len_buf) as usize;
-            let mut f_buf = vec![0u8; f_len];
-            socket.read_exact(&mut f_buf).await?;
-            let meta: FileMetadata = deserialize(&f_buf)?;
-
-            println!(
-                "Portal: Receiving file {} of {}: '{}' ({} bytes)",
-                index + 1,
-                total_items,
-                meta.filename,
-                meta.file_size
-            );
-
-            receive_file(&mut socket, &target_dir, &meta).await?;
-        },
-        ItemKind::Directory => {
-
-            let mut d_len_buf = [0u8; 4];
-            socket.read_exact(&mut d_len_buf).await?;
-            let d_len = u32::from_be_bytes(d_len_buf) as usize;
-            let mut d_buf = vec![0u8; d_len];
-            socket.read_exact(&mut d_buf).await?;
-            let meta: DirectoryMetadata = deserialize(&d_buf)?;
-
-            println!(
-                "Portal: Receiving directory {} of {}: '{}' ({} internal files)",
-                index + 1,
-                total_items,
-                meta.dirname,
-                meta.files.len()
-            );
-
-            receive_directory(&mut socket, &target_dir, &meta).await?;
-        }
+        // Pass the extracted data and Receive using the new function
+        receive_item(&mut socket, &target_dir, item_name, is_dir).await?;
     }
-}
 
     println!(
         "Portal: All item(s) have been received successfully! and saved to '{}'",
