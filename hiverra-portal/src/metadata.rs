@@ -21,17 +21,7 @@ pub struct DirectoryMetadata {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum ItemKind {
-    File,
-    Directory,
-}
-#[derive(Serialize, Deserialize, Debug)]
 pub enum TransferItem {
     File(FileMetadata),
     Directory(DirectoryMetadata),
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TransferHeader {
-    pub kind: ItemKind,
 }
