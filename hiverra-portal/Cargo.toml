@@ -45,6 +45,8 @@ uuid = { version = "1.21.0", features = ["v4"] }
 walkdir = "2.5.0"
 async-compression = { version = "0.4", features = ["tokio", "gzip"] }
 astral-tokio-tar = "0.5.6"
+tokio-stream = "0.1.18"
+async-walkdir = "2.1.0"
 
 
 # The profile that 'dist' will build with

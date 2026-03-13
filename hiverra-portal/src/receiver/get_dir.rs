@@ -1,4 +1,3 @@
-
 use {
     crate::config::models::PortalConfig,
     anyhow::{Context, Result, anyhow},
