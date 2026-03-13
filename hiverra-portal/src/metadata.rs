@@ -7,17 +7,16 @@ pub struct GlobalTransferManifest {
     pub description: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileMetadata {
     pub filename: String,
     pub file_size: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DirectoryMetadata {
     pub dirname: String,
     pub total_size: u64,
-    pub files: Vec<FileMetadata>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

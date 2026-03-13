@@ -4,20 +4,21 @@ mod receive_item;
 
 use {
     crate::{
-        config::models::PortalConfig,
-        discovery::beacon::start_beacon,
-        metadata::{GlobalTransferManifest, TransferItem},
+        config::models::PortalConfig, discovery::beacon::start_beacon,
+        metadata::GlobalTransferManifest,
     },
     anyhow::{Context, Result, anyhow},
+    async_compression::tokio::bufread::GzipDecoder,
     bincode::deserialize,
     get_dir::get_target_dir,
     local_ip::get_local_ip,
     receive_item::receive_item,
     std::path::PathBuf,
     tokio::{
-        io::{AsyncReadExt, AsyncWriteExt},
+        io::{AsyncReadExt, AsyncWriteExt, BufReader},
         net::TcpListener,
     },
+    tokio_tar::Archive,
     uuid::Uuid,
 };
 
@@ -97,8 +98,6 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
         .await
         .context("Failed to send verification ID")?;
 
-    ///// new funtion receiving begins
-
     //  Read the metadata length
     let mut global_manifest_len_buf = [0u8; 4];
     socket
@@ -109,7 +108,6 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     let global_manifest_len = u32::from_be_bytes(global_manifest_len_buf) as usize;
 
     //  Read the Metadata Blob
-
     let mut global_manifest_buf = vec![0u8; global_manifest_len];
     socket
         .read_exact(&mut global_manifest_buf)
@@ -139,33 +137,18 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     let target_dir = get_target_dir(&dir).await?;
 
     // receive file or directories
-    // Loop through each file in the manifest
-    for index in 0..total_items {
-        // Read the actual Metadata Enum (TransferItem)
-        let mut i_len_buf = [0u8; 4];
-        socket.read_exact(&mut i_len_buf).await?;
-        let i_len = u32::from_be_bytes(i_len_buf) as usize;
-        let mut i_buf = vec![0u8; i_len];
-        socket.read_exact(&mut i_buf).await?;
-        let item: TransferItem = deserialize(&i_buf)?;
+    let current_reader = BufReader::new(socket);
+    let decoder = GzipDecoder::new(current_reader);
+    let mut archive = Archive::new(decoder);
 
-        // Extract everything once
-        let (item_name, item_size, is_dir) = match &item {
-            TransferItem::File(m) => (&m.filename, m.file_size, false),
-            TransferItem::Directory(m) => (&m.dirname, m.total_size, true),
-        };
+    // receive the item: fike or directory
+    receive_item(&mut archive, &target_dir, total_items).await?;
 
-        println!(
-            "Portal: Receiving item {} of {}: '{}' ({} bytes)",
-            index + 1,
-            total_items,
-            item_name,
-            item_size
-        );
+    let decoder = archive
+        .into_inner()
+        .map_err(|_| anyhow!("Failed to recover decoder from archive"))?;
 
-        // Pass the extracted data and Receive using the new function
-        receive_item(&mut socket, &target_dir, item_name, is_dir).await?;
-    }
+    let _socket = decoder.into_inner();
 
     println!(
         "Portal: All item(s) have been received successfully! and saved to '{}'",
