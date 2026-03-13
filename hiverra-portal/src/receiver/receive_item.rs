@@ -1,59 +1,180 @@
 use {
-    anyhow::{Context, Result},
-    async_compression::tokio::bufread::GzipDecoder,
+    crate::metadata::TransferItem,
+    anyhow::{Context, Result, anyhow},
+    bincode::deserialize,
+    inquire::Select,
     std::path::PathBuf,
     tokio::{
-        fs::{create_dir_all, remove_dir_all, rename},
-        io::BufReader,
-        net::TcpStream,
+        fs::{File, create_dir_all, remove_dir_all, remove_file, rename, try_exists},
+        io::AsyncRead,
     },
+    tokio_stream::StreamExt,
     tokio_tar::Archive,
 };
-pub async fn receive_item(
-    socket: &mut TcpStream,
+
+#[derive(Clone, Copy, PartialEq)]
+enum ConflictStrategy {
+    Prompt,
+    OverwriteAll,
+    RenameAll,
+    SkipAll,
+}
+
+pub async fn receive_item<R>(
+    archive: &mut Archive<R>,
     target_dir: &PathBuf,
-    item_name: &str,
-    is_dir: bool,
-) -> Result<()> {
-    // Setup Atomic Paths
-    let temp_name = format!(".tmp_{}_portal", item_name);
-    let temp_path = target_dir.join(&temp_name);
-    let final_path = target_dir.join(item_name);
+    total_items: u32,
+) -> Result<()>
+where
+    R: AsyncRead + Unpin + Send,
+{
+    // make contract: an Option that stays until overwritten
+    let mut last_contract: Option<TransferItem> = None;
+    let mut global_strategy = ConflictStrategy::Prompt;
 
-    // Clean up old failed attempts
-    if temp_path.exists() {
-        let _ = remove_dir_all(&temp_path).await;
+    let mut received_count = 0;
+    println!("Portal: Receiving items...");
+
+    let mut entries = archive.entries()?;
+
+    while let Some(entry_result) = entries.next().await {
+        let mut entry = entry_result.context("Failed to read tar entry")?;
+        let path = entry.path()?.to_path_buf();
+
+        // Catch metadata
+        if path.to_string_lossy() == ".portal.item.meta" {
+            received_count += 1;
+            println!("Portal: Receiving item {}/{}", received_count, total_items);
+
+            let mut meta_bytes = Vec::new();
+            tokio::io::copy(&mut entry, &mut meta_bytes)
+                .await
+                .context("Failed to read metadata contract")?;
+
+            last_contract = Some(deserialize(&meta_bytes)?);
+            continue;
+        }
+
+        // keep the dir contract alive for the whole subtree
+        let contract = last_contract.as_ref().ok_or_else(|| {
+            anyhow!(
+                "Protocol error: data entry '{}' arrived without metadata",
+                path.display()
+            )
+        })?;
+
+        let is_dir = entry.header().entry_type().is_dir();
+        let item_name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+        let temp_path = target_dir.join(format!(".tmp_{}_portal", item_name));
+        let mut final_path = target_dir.join(&path);
+
+        // pre-check existence once for efficiency
+        let final_exists = try_exists(&final_path).await?;
+        let temp_exists = try_exists(&temp_path).await?;
+
+        //  handle conflict
+        if final_exists && global_strategy != ConflictStrategy::OverwriteAll {
+            if global_strategy == ConflictStrategy::SkipAll {
+                continue;
+            }
+
+            if global_strategy == ConflictStrategy::RenameAll {
+                final_path = get_unused_path(final_path);
+            } else {
+                // check user input to know next step
+                let options = vec![
+                    "Overwrite",
+                    "Overwrite All",
+                    "Rename",
+                    "Rename All",
+                    "Skip",
+                    "Skip All",
+                ];
+                let ans = Select::new(&format!("Portal: '{}' exists. Action?", item_name), options)
+                    .prompt()?;
+
+                match ans {
+                    "Overwrite" => (),
+                    "Overwrite All" => global_strategy = ConflictStrategy::OverwriteAll,
+                    "Rename" => final_path = get_unused_path(final_path),
+                    "Rename All" => {
+                        global_strategy = ConflictStrategy::RenameAll;
+                        final_path = get_unused_path(final_path);
+                    }
+                    "Skip" => continue,
+                    "Skip All" => {
+                        global_strategy = ConflictStrategy::SkipAll;
+                        continue;
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        // prepare temporary folder
+        if temp_exists {
+            let _ = remove_dir_all(&temp_path).await;
+        }
+        create_dir_all(&temp_path).await?;
+
+        if !is_dir {
+            let file_in_temp = temp_path.join(item_name);
+            let mut outfile = File::create(&file_in_temp).await?;
+            tokio::io::copy(&mut entry, &mut outfile).await?;
+        }
+
+        // move to final location
+        if let Some(parent) = final_path.parent() {
+            create_dir_all(parent).await?;
+        }
+
+        if !is_dir {
+            if final_exists {
+                let _ = remove_file(&final_path).await;
+            }
+            rename(temp_path.join(item_name), &final_path).await?;
+            let _ = remove_dir_all(&temp_path).await;
+        } else {
+            if final_exists {
+                let _ = remove_dir_all(&final_path).await;
+            }
+            rename(&temp_path, &final_path).await?;
+        }
+
+        // print status
+        match contract {
+            TransferItem::File(f) => {
+                println!("Portal: File '{}' received successfully!", f.filename);
+                last_contract = None;
+            }
+            TransferItem::Directory(d) => {
+                if path.to_string_lossy() == d.dirname {
+                    println!("Portal: Directory '{}' received successfully!", d.dirname);
+                }
+            }
+        }
     }
-    create_dir_all(&temp_path).await?;
-
-    //  Unpack the compressed TAR stream into Temp
-    // We wrap the socket in Gzip, then Tar
-    let reader = BufReader::new(socket);
-    let decoder = GzipDecoder::new(reader);
-    let mut archive = Archive::new(decoder);
-
-    archive
-        .unpack(&temp_path)
-        .await
-        .context(format!("Failed to unpack {} to temp", item_name))?;
-
-    //  Move to Final Destination
-    // If it's a file, we need to point to the file inside the temp folder
-    if !is_dir {
-        let actual_file_in_temp = temp_path.join(item_name);
-        rename(&actual_file_in_temp, &final_path).await?;
-        let _ = remove_dir_all(&temp_path).await; // Cleanup the empty temp dir
-    } else {
-        rename(&temp_path, &final_path)
-            .await
-            .context("Failed to move directory to final destination")?;
-    }
-
-    let kind_label = if is_dir { "Directory" } else { "File" };
-    println!(
-        "Portal: {} '{}' received successfully!",
-        kind_label, item_name
-    );
 
     Ok(())
+}
+
+/// helper to get path for incrmeental renaming
+fn get_unused_path(path: PathBuf) -> PathBuf {
+    let mut n = 1;
+    let stem = path.file_stem().unwrap().to_string_lossy();
+    let ext = path
+        .extension()
+        .map(|e| format!(".{}", e.to_string_lossy()))
+        .unwrap_or_default();
+    let parent = path.parent().unwrap();
+    loop {
+        let new_path = parent.join(format!("{} ({}){}", stem, n, ext));
+        if !new_path.exists() {
+            return new_path;
+        }
+        n += 1;
+    }
 }

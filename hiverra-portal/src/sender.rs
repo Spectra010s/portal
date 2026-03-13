@@ -6,7 +6,9 @@ use {
         metadata::{DirectoryMetadata, FileMetadata, GlobalTransferManifest, TransferItem},
         select::select_files_to_send,
     },
-    anyhow::{Context, Error, Result, anyhow},
+    anyhow::{Context, Result, anyhow},
+    async_compression::tokio::write::GzipEncoder,
+    async_walkdir::WalkDir,
     bincode::serialize,
     inquire::{Confirm, Text},
     send_item::send_item,
@@ -16,13 +18,13 @@ use {
         fs::metadata,
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpStream,
-        task,
         time::timeout,
     },
-    walkdir::WalkDir,
+    tokio_stream::StreamExt,
+    tokio_tar::Builder,
 };
 
-async fn create_file_metadata(path: &PathBuf) -> Result<FileMetadata> {
+pub async fn create_file_metadata(path: &PathBuf) -> Result<FileMetadata> {
     let attr = metadata(path).await?;
 
     let filename = path
@@ -36,38 +38,21 @@ async fn create_file_metadata(path: &PathBuf) -> Result<FileMetadata> {
         file_size: attr.len(),
     })
 }
-
 async fn create_directory_metadata(dir: &PathBuf) -> Result<DirectoryMetadata> {
-    let dir_clone = dir.clone();
+    let mut total_size = 0u64;
+    let mut entries = WalkDir::new(dir);
 
-    // using blocking thread bcus of walkdir
-    let result = task::spawn_blocking(move || {
-        let mut files_meta = Vec::new();
-        let mut total_size = 0u64;
+    // We walk the directory once to get the total size for the Global Manifest
+    while let Some(entry) = entries.next().await {
+        let entry = entry.context("Portal: Failed to read directory entry for metadata")?;
+        let file_type = entry.file_type().await?;
 
-        for entry in WalkDir::new(&dir_clone).into_iter().filter_map(|e| e.ok()) {
-            if entry.file_type().is_file() {
-                let path = entry.path().to_path_buf();
-
-                let attr = std::fs::metadata(&path)?;
-                let size = attr.len();
-                total_size += size;
-
-                // Keep the folder structure relative to the parent
-                let rel_path = path.strip_prefix(&dir_clone)?.to_string_lossy().to_string();
-
-                files_meta.push(FileMetadata {
-                    filename: rel_path,
-                    file_size: size,
-                });
+        if file_type.is_file() {
+            if let Ok(meta) = entry.metadata().await {
+                total_size += meta.len();
             }
         }
-
-        Ok::<(Vec<FileMetadata>, u64), Error>((files_meta, total_size))
-    })
-    .await??;
-
-    let (files_meta, total_size) = result;
+    }
 
     Ok(DirectoryMetadata {
         dirname: dir
@@ -76,7 +61,6 @@ async fn create_directory_metadata(dir: &PathBuf) -> Result<DirectoryMetadata> {
             .unwrap_or("unknown_dir")
             .to_string(),
         total_size,
-        files: files_meta,
     })
 }
 
@@ -232,18 +216,31 @@ pub async fn start_send(
 
     println!("Portal: Preparing to send {} items(s)...", total_items);
 
-    // Start with the initial stream
-    let mut current_stream = stream;
+    let compressor = GzipEncoder::new(stream);
+    let mut builder = Builder::new(compressor);
 
     for (index, (path, item)) in items_to_send.into_iter().enumerate() {
         println!("Portal: Sending item {} of {}", index + 1, total_items);
 
-        // send either the file or directory
-        current_stream = send_item(current_stream, path, item)
+        send_item(&mut builder, path, item)
             .await
-            .context("Failed to stream item as tarball")?;
+            .context("Failed to append item to tarball")?;
     }
+    // finalize the Tar archive
+    builder.finish().await?;
+
+    // get the compressor back
+    let mut compressor = builder.into_inner().await?;
+
+    compressor
+        .shutdown()
+        .await
+        .context("Failed to shutdown compressor")?;
+    // flush the underlying stream to ensure bytes are actually sent
+    let mut stream = compressor.into_inner();
+    stream.flush().await?;
 
     println!("Portal: All file(s) have been sent successfully!");
+
     Ok(())
 }
