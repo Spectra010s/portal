@@ -30,7 +30,7 @@ Here is the strategic breakdown of the 6 issues and which will be done first:
    Why: Sending a folder is just "Multiple Files" with directory logic.
 
 - Goal: portal send ./my_folder should automatically walk the directory tree.
-- Impact: The receiver needs to recreate the folder structure on its end based on the paths provided in the Manifest.
+- Impact: The receiver needs to recreate the folder structure on its end based on the paths provided in the Manifest. [X]
 
 6. Progress Bars with indicatif [(Issue 18)](https://github.com/Spectra010s/portal/issues/18)
    Why: This is "UI Polish." It’s much easier to implement once we file transfer logic (the handshake and stream) is finalized.
