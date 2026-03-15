@@ -1,5 +1,6 @@
 use {
-    crate::metadata::TransferItem,
+    crate::metadata::{FileMetadata, PortalMeta, TransferItem},
+    crate::sender::create_file_metadata,
     anyhow::{Context, Result},
     async_walkdir::WalkDir,
     bincode::serialize,
@@ -21,9 +22,8 @@ where
                 file_meta.filename, file_meta.file_size
             );
 
-            // Send the pair: metadata and file data
-            let meta_item = TransferItem::File(file_meta.clone());
-            let meta_bytes = serialize(&meta_item)?;
+            // Wrap in PortalMeta::Item and send metadata
+            let meta_bytes = serialize(&PortalMeta::Item(TransferItem::File(file_meta.clone())))?;
             append_raw_meta(builder, meta_bytes).await?;
 
             let mut file = File::open(&path).await?;
@@ -38,7 +38,7 @@ where
         }
 
         TransferItem::Directory(dir_meta) => {
-            // tell user they are sending empyt dir if empty
+            // tell user they are sending empty dir if empty
             if dir_meta.total_size == 0 {
                 println!(
                     "Portal: Note: Directory '{}' is empty. Sending structure only.",
@@ -51,11 +51,12 @@ where
                 );
             }
 
-            // send the directory metadata
-            let meta_bytes = serialize(&TransferItem::Directory(dir_meta.clone()))?;
+            // Top-level directory metadata
+            let meta_bytes =
+                serialize(&PortalMeta::Item(TransferItem::Directory(dir_meta.clone())))?;
             append_raw_meta(builder, meta_bytes).await?;
 
-            // add the directory itself to the tar and ensure empty folders are created
+            // Append directory entry itself
             let mut dir_header = Header::new_gnu();
             dir_header.set_path(&dir_meta.dirname)?;
             dir_header.set_entry_type(EntryType::Directory);
@@ -64,9 +65,8 @@ where
             dir_header.set_cksum();
             builder.append(&dir_header, &[][..]).await?;
 
-            // stream the contents of the directory
+            // Stream the contents of the directory
             let mut entries = WalkDir::new(&path);
-
             while let Some(entry) = entries.next().await {
                 let entry = entry.context("Portal: Failed to read directory entry")?;
                 let file_type = entry.file_type().await?;
@@ -75,18 +75,32 @@ where
                 let tar_path = format!("{}/{}", dir_meta.dirname, rel_path.display());
 
                 if file_type.is_file() {
+                    // Nested file metadata
+                    let mut file_meta = create_file_metadata(&local_path).await?;
+                    file_meta.filename = tar_path.clone();
+
+                    let meta_bytes = serialize(&PortalMeta::NestedFile(file_meta.clone()))?;
+                    append_raw_meta(builder, meta_bytes).await?;
+
                     let mut file = File::open(&local_path).await?;
                     let mut header = Header::new_gnu();
                     header.set_path(&tar_path)?;
                     header.set_size(file.metadata().await?.len());
                     header.set_mode(0o644);
                     header.set_cksum();
-
                     builder.append(&header, &mut file).await?;
 
-                    println!("Portal: Directory file '{}' sent succesfully!", &tar_path);
+                    println!("Portal: Directory file '{}' sent successfully!", &tar_path);
                 } else if file_type.is_dir() {
-                    // Send subdirectory headers to maintain tree structure
+                    // Subdirectory header
+                    let sub_dir_meta = FileMetadata {
+                        filename: tar_path.clone(),
+                        file_size: 0,
+                    };
+
+                    let meta_bytes = serialize(&PortalMeta::NestedFile(sub_dir_meta))?;
+                    append_raw_meta(builder, meta_bytes).await?;
+
                     let mut header = Header::new_gnu();
                     header.set_path(&tar_path)?;
                     header.set_entry_type(EntryType::Directory);
@@ -96,7 +110,11 @@ where
                     builder.append(&header, &[][..]).await?;
                 }
             }
-            println!("Portal: Directory '{}' sent succesfully!", dir_meta.dirname);
+
+            println!(
+                "Portal: Directory '{}' sent successfully!",
+                dir_meta.dirname
+            );
         }
     }
 
@@ -109,7 +127,7 @@ async fn append_raw_meta<W: AsyncWrite + Unpin + Send>(
     bytes: Vec<u8>,
 ) -> Result<()> {
     let mut header = Header::new_gnu();
-    header.set_path(".portal.item.meta")?;
+    header.set_path(".portal.meta")?;
     header.set_size(bytes.len() as u64);
     header.set_cksum();
     builder.append(&header, &bytes[..]).await?;
