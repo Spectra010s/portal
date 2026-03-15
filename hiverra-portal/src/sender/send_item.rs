@@ -8,7 +8,7 @@ use {
     tokio::{fs::File, io::AsyncWrite},
     tokio_stream::StreamExt,
     tokio_tar::{Builder, EntryType, Header},
-    tracing::{debug, info, warn},
+    tracing::{debug, info, trace, warn},
 };
 
 /// Appends a file or directory to the provided tar builder
@@ -26,14 +26,18 @@ where
             // Wrap in PortalMeta::Item and send metadata
             debug!("Serializing metadata for file: {}", file_meta.filename);
             let meta_bytes = serialize(&PortalMeta::Item(TransferItem::File(file_meta.clone())))?;
+            trace!("Serialized file metadata size: {} bytes", meta_bytes.len());
             append_raw_meta(builder, meta_bytes).await?;
 
+            trace!("Opening file for reading: {:?}", path);
             let mut file = File::open(&path).await?;
             let mut header = Header::new_gnu();
             header.set_path(&file_meta.filename)?;
             header.set_size(file_meta.file_size);
             header.set_mode(0o644);
             header.set_cksum();
+
+            trace!("Appending file '{}' to tar archive", file_meta.filename);
             builder.append(&header, &mut file).await?;
 
             println!("Portal: File '{}' sent successfully!", file_meta.filename);
@@ -65,9 +69,17 @@ where
             debug!("Serializing metadata for directory: {}", dir_meta.dirname);
             let meta_bytes =
                 serialize(&PortalMeta::Item(TransferItem::Directory(dir_meta.clone())))?;
+            trace!(
+                "Serialized directory metadata size: {} bytes",
+                meta_bytes.len()
+            );
             append_raw_meta(builder, meta_bytes).await?;
 
             // Append directory entry itself
+            trace!(
+                "Appending directory node '{}' to tar archive",
+                dir_meta.dirname
+            );
             let mut dir_header = Header::new_gnu();
             dir_header.set_path(&dir_meta.dirname)?;
             dir_header.set_entry_type(EntryType::Directory);
@@ -77,6 +89,7 @@ where
             builder.append(&dir_header, &[][..]).await?;
 
             // Stream the contents of the directory
+            debug!("Starting WalkDir for directory: {:?}", path);
             let mut entries = WalkDir::new(&path);
             while let Some(entry) = entries.next().await {
                 let entry = entry.context("Portal: Failed to read directory entry")?;
@@ -85,21 +98,31 @@ where
                 let rel_path = local_path.strip_prefix(&path)?;
                 let tar_path = format!("{}/{}", dir_meta.dirname, rel_path.display());
 
+                trace!(
+                    "Processing entry: {:?} -> tar_path: {}",
+                    local_path, tar_path
+                );
+
                 if file_type.is_file() {
                     // Nested file metadata
                     debug!("Processing nested file: {}", tar_path);
                     let mut file_meta = create_file_metadata(&local_path).await?;
                     file_meta.filename = tar_path.clone();
 
+                    trace!("Serializing nested file metadata for: {}", tar_path);
                     let meta_bytes = serialize(&PortalMeta::NestedFile(file_meta.clone()))?;
+                    trace!("Nested file metadata size: {} bytes", meta_bytes.len());
                     append_raw_meta(builder, meta_bytes).await?;
 
+                    trace!("Opening nested file: {:?}", local_path);
                     let mut file = File::open(&local_path).await?;
                     let mut header = Header::new_gnu();
                     header.set_path(&tar_path)?;
                     header.set_size(file.metadata().await?.len());
                     header.set_mode(0o644);
                     header.set_cksum();
+
+                    trace!("Appending nested file '{}' to tar archive", tar_path);
                     builder.append(&header, &mut file).await?;
 
                     info!("Directory file sent successfully: {}", &tar_path);
@@ -111,9 +134,12 @@ where
                         file_size: 0,
                     };
 
+                    trace!("Serializing nested directory metadata for: {}", tar_path);
                     let meta_bytes = serialize(&PortalMeta::NestedFile(sub_dir_meta))?;
+                    trace!("Nested directory metadata size: {} bytes", meta_bytes.len());
                     append_raw_meta(builder, meta_bytes).await?;
 
+                    trace!("Appending subdirectory entry to tar: {}", tar_path);
                     let mut header = Header::new_gnu();
                     header.set_path(&tar_path)?;
                     header.set_entry_type(EntryType::Directory);
@@ -144,6 +170,7 @@ async fn append_raw_meta<W: AsyncWrite + Unpin + Send>(
         "Appending metadata header (.portal.meta) - size: {} bytes",
         bytes.len()
     );
+    trace!("Metadata payload content: {:?}", bytes);
     let mut header = Header::new_gnu();
     header.set_path(".portal.meta")?;
     header.set_size(bytes.len() as u64);
