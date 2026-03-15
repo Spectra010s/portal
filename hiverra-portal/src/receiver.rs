@@ -19,7 +19,7 @@ use {
         net::TcpListener,
     },
     tokio_tar::Archive,
-    tracing::{debug, error, info, warn},
+    tracing::{debug, error, info, trace, warn},
     uuid::Uuid,
 };
 
@@ -33,11 +33,13 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
 
     // Use the CLI flag directly
     let n_port = if let Some(port) = port {
+        trace!("Port source: CLI argument");
         debug!("Portal: Overriding config port with CLI port: {}", port);
         port
     } else if let Some(cfg) = PortalConfig::load_or_return().await? {
         //  Use config if it exists and has a value
         if let Some(p) = cfg.network.default_port {
+            trace!("Port source: User Configuration");
             debug!("Portal: Port not given, using config port: {}", p);
             p
         } else {
@@ -46,6 +48,7 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
         }
     } else {
         //  Neither CLI nor config
+        trace!("Port source: No configuration found, falling back to requirement check");
         error!("No port configuration found");
         return Err(anyhow!("No port provided and no config found"));
     };
@@ -65,6 +68,7 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     debug!("Generated session Node ID: {}", node_id);
 
     let new_addr = format!("0.0.0.0:{}", n_port);
+    trace!("Listener target address: {}", new_addr);
 
     let listener = TcpListener::bind(&new_addr)
         .await
@@ -83,7 +87,9 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
         }
         // wait for the actual TCP connection
         result = listener.accept() => {
-            result.context("Failed to accept connection")?
+            let (conn, addr) = result.context("Failed to accept connection")?;
+            trace!("Accepted raw TCP connection from: {:?}", addr);
+            (conn, addr)
         }
     };
 
@@ -96,6 +102,7 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     debug!("Sending Node ID for verification: {}", node_id);
     let id_bytes = node_id.as_bytes();
     let id_len = id_bytes.len() as u32;
+    trace!("Node ID length: {} bytes", id_len);
 
     socket
         .write_all(&id_len.to_be_bytes())
@@ -105,6 +112,7 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
         .write_all(id_bytes)
         .await
         .context("Failed to send verification ID")?;
+    trace!("Verification identity sent to peer.");
 
     //  Read the metadata length
     let mut global_manifest_len_buf = [0u8; 4];
@@ -125,12 +133,17 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
         .read_exact(&mut global_manifest_buf)
         .await
         .context("Failed to read global manifest blob")?;
+    trace!(
+        "Read global manifest raw bytes (size: {}). Deserializing...",
+        global_manifest_len
+    );
 
     // Deserialize the manifest
     let global_manifest: GlobalTransferManifest =
         deserialize(&global_manifest_buf).context("Failed to deserialize global manifest")?;
 
     info!("Global manifest received and deserialized successfully.");
+    trace!("Manifest data: {:?}", global_manifest);
 
     let total_directories = &global_manifest.total_directories;
     let total_files = global_manifest.total_files;
@@ -160,14 +173,17 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
 
     // receive the item: file or directory
     receive_item(&mut archive, &target_dir, total_items).await?;
+    trace!("receive_item recursive loop completed.");
 
     debug!("Extraction complete. Recovering stream...");
     let decoder = archive.into_inner().map_err(|_| {
         error!("Failed to recover decoder from archive");
         anyhow!("Failed to recover decoder from archive")
     })?;
+    trace!("GzipDecoder recovered from Archive wrapper.");
 
     let _socket = decoder.into_inner();
+    trace!("TcpStream recovered from GzipDecoder.");
 
     info!(
         "SUCCESS: Transfer completed. Saved to {}",
