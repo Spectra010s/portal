@@ -10,6 +10,7 @@ use {
     anyhow::{Context, Result},
     clap::Subcommand,
     std::path::PathBuf,
+    tracing::{debug, info},
 };
 
 // 2. Defining the Choices (The Enum)
@@ -80,39 +81,51 @@ impl Commands {
                 to,
                 recursive,
             } => {
+                info!("Command: SEND initiated");
+                debug!(
+                    "Params: file={:?}, address={:?}, port={}, to={:?}, recursive={}",
+                    file, address, port, to, recursive
+                );
                 // send file or files
                 start_send(&file, &address, &port, &to, &recursive)
                     .await
                     .context("Failed to execute Send command")?;
             }
             Commands::Receive { port, dir } => {
+                info!("Command: RECEIVE initiated");
+                debug!("Params: port={:?}, dir={:?}", port, dir);
                 // Pass the error up if receiving fails
                 start_receiver(*port, &dir)
                     .await
                     .context("Failed to execute Receive command")?;
             }
             Commands::Update => {
+                info!("Command: UPDATE initiated");
                 update_portal()
                     .await
                     .context("Failed to execute Update commamd")?;
             }
             Commands::Config { action } => match action {
                 ConfigAction::Set { key, value } => {
+                    info!("Config: SET key='{}'", key);
                     set_config(&key, &value)
                         .await
                         .context("Failed to set configuration")?;
                 }
                 ConfigAction::Show { key } => {
+                    info!("Config: SHOW key='{}'", key);
                     // Logic to read and print the a varable value
                     show_config_value(&key)
                         .await
                         .context("Failed to get variable value")?;
                 }
                 ConfigAction::List => {
+                    info!("Config: LIST initiated");
                     // Logic to list all the variables
                     list_config().await?;
                 }
                 ConfigAction::Setup => {
+                    info!("Config: SETUP initiated");
                     handle_setup().await.context("Failed to run setup")?;
                 }
             },
