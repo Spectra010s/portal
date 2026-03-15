@@ -42,7 +42,7 @@ where
         trace!("--- Processing archive entry {} ---", path.display());
 
         // Catch metadata
-        if path.to_string_lossy() == ".portal.meta" {
+        if path.to_string_lossy().replace('\\', "/") == ".portal.meta" {
             debug!("Caught metadata block (.portal.meta)");
             let mut meta_bytes = Vec::new();
             tokio::io::copy(&mut entry, &mut meta_bytes)
@@ -262,7 +262,7 @@ where
                     info!("Successfully verified and saved: {}", f.filename);
                 }
                 TransferItem::Directory(d) => {
-                    if d.dirname != path.to_string_lossy() {
+                    if d.dirname != path.to_string_lossy().replace('\\', "/") {
                         error!(
                             "Dirname mismatch: Expected {}, got {}",
                             d.dirname,
@@ -276,7 +276,7 @@ where
             },
             PortalMeta::NestedFile(f) => {
                 debug!("Verifying nested item: {}", f.filename);
-                if f.filename != path.to_string_lossy() {
+                if f.filename != path.to_string_lossy().replace('\\', "/") {
                     return Err(anyhow!(
                         "Protocol error: Directory filename mismatch. Expected '{}', got '{}'",
                         f.filename,
