@@ -3,7 +3,7 @@ use {
     inquire::MultiSelect,
     std::path::PathBuf,
     tokio::fs::read_dir,
-    tracing::{debug, info, warn},
+    tracing::{debug, info, trace, warn},
 };
 
 pub async fn select_files_to_send() -> Result<Option<Vec<PathBuf>>> {
@@ -12,7 +12,9 @@ pub async fn select_files_to_send() -> Result<Option<Vec<PathBuf>>> {
     let mut files = Vec::new();
 
     while let Ok(Some(entry)) = entries.next_entry().await {
-        files.push(entry.path());
+        let path = entry.path();
+        trace!("Discovered potential file path: {:?}", path);
+        files.push(path);
     }
 
     if files.is_empty() {
@@ -42,6 +44,10 @@ pub async fn select_files_to_send() -> Result<Option<Vec<PathBuf>>> {
                 return Ok(None);
             }
             // Convert the user's string choices back into PathBufs
+            trace!(
+                "Converting {} selected strings back to PathBufs",
+                choices.len()
+            );
             let selected_paths: Vec<PathBuf> = choices.into_iter().map(PathBuf::from).collect();
 
             info!("User selected {} files for sending", selected_paths.len());
@@ -49,8 +55,9 @@ pub async fn select_files_to_send() -> Result<Option<Vec<PathBuf>>> {
 
             Ok(Some(selected_paths))
         }
-        Err(_) => {
-            info!("File selection UI cancelled by user.");
+        Err(e) => {
+            info!("File selection UI cancelled by user or encountered error.");
+            trace!("inquire::MultiSelect prompt error: {}", e);
             println!("Portal: Selection cancelled.");
             Ok(None)
         }
