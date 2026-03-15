@@ -96,7 +96,8 @@ where
                 let file_type = entry.file_type().await?;
                 let local_path = entry.path();
                 let rel_path = local_path.strip_prefix(&path)?;
-                let tar_path = format!("{}/{}", dir_meta.dirname, rel_path.display());
+                let rel_path_str = rel_path.to_string_lossy().replace('\\', "/");
+                let tar_path = format!("{}/{}", dir_meta.dirname, rel_path_str);
 
                 trace!(
                     "Processing entry: {:?} -> tar_path: {}",
