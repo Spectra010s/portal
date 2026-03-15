@@ -10,7 +10,7 @@ use {
     },
     tokio_stream::StreamExt,
     tokio_tar::Archive,
-    tracing::{debug, error, info, warn},
+    tracing::{debug, error, info, trace, warn},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -39,6 +39,7 @@ where
     while let Some(entry_result) = entries.next().await {
         let mut entry = entry_result.context("Failed to read tar entry")?;
         let path = entry.path()?.to_path_buf();
+        trace!("--- Processing archive entry {} ---", path.display());
 
         // Catch metadata
         if path.to_string_lossy() == ".portal.meta" {
@@ -47,7 +48,9 @@ where
             tokio::io::copy(&mut entry, &mut meta_bytes)
                 .await
                 .context("Failed to read metadata")?;
-            contract = Some(deserialize(&meta_bytes)?);
+            let deserialized: PortalMeta = deserialize(&meta_bytes)?;
+            trace!("Deserialized metadata content: {:?}", deserialized);
+            contract = Some(deserialized);
             continue;
         }
 
@@ -61,6 +64,10 @@ where
                 path.display()
             )
         })?;
+        trace!(
+            "Matched entry '{}' with its metadata contract.",
+            path.display()
+        );
 
         if let PortalMeta::Item(item) = &meta {
             items_processed += 1;
@@ -119,6 +126,10 @@ where
             .filter(|c| matches!(c, std::path::Component::Normal(_)))
             .collect::<PathBuf>();
         let mut final_path = target_dir.join(safe_path);
+        trace!(
+            "Resolved extraction paths: temp={:?}, final={:?}",
+            temp_path, final_path
+        );
 
         // pre-check existence
         let final_exists = try_exists(&final_path).await?;
@@ -145,6 +156,7 @@ where
                 ];
                 let ans = Select::new(&format!("Portal: '{}' exists. Action?", item_name), options)
                     .prompt()?;
+                trace!("User selected conflict resolution: {}", ans);
 
                 match ans {
                     "Overwrite" => info!("User chose to overwrite {:?}", item_name),
@@ -176,33 +188,43 @@ where
         }
 
         // prepare temp folder
+        trace!("Cleaning/Creating temp directory: {:?}", temp_path);
         if temp_exists {
             let _ = remove_dir_all(&temp_path).await;
         }
         create_dir_all(&temp_path).await?;
 
         if !is_dir {
+            trace!(
+                "Unpacking file to temp storage: {}/{}",
+                temp_path.display(),
+                item_name
+            );
             let file_in_temp = temp_path.join(&item_name);
             let mut outfile = File::create(&file_in_temp).await?;
             tokio::io::copy(&mut entry, &mut outfile).await?;
         }
 
         // move to final location
+        trace!("Moving from temp to final destination: {:?}", final_path);
         if let Some(parent) = final_path.parent() {
             create_dir_all(parent).await?;
         }
         if !is_dir {
             if final_exists {
+                trace!("Overwriting existing file at {:?}", final_path);
                 let _ = remove_file(&final_path).await;
             }
             rename(temp_path.join(item_name), &final_path).await?;
             let _ = remove_dir_all(&temp_path).await;
         } else {
             if final_exists {
+                trace!("Overwriting existing directory at {:?}", final_path);
                 let _ = remove_dir_all(&final_path).await;
             }
             rename(&temp_path, &final_path).await?;
         }
+        debug!("Item finalized at target path: {:?}", final_path);
 
         // validate metadata
         match meta {
@@ -225,8 +247,17 @@ where
                             f.file_size,
                             entry.header().size()?
                         );
+                        trace!(
+                            "Verification failure detail: manifest_size={} vs header_size={}",
+                            f.file_size,
+                            entry.header().size()?
+                        );
                         return Err(anyhow!("Protocol error: Top-level file size mismatch"));
                     }
+                    trace!(
+                        "Self-check: file size matches manifest ({} bytes)",
+                        f.file_size
+                    );
                     println!("Portal: File '{}' received successfully!", f.filename);
                     info!("Successfully verified and saved: {}", f.filename);
                 }
@@ -254,11 +285,18 @@ where
                 }
                 // Compare size for integrity
                 if !is_dir && f.file_size != entry.header().size()? {
+                    trace!(
+                        "Nested file verification failure: {} (manifest: {}, header: {})",
+                        f.filename,
+                        f.file_size,
+                        entry.header().size()?
+                    );
                     return Err(anyhow!(
                         "Protocol error: Directory file size mismatch for '{}'",
                         f.filename
                     ));
                 }
+                trace!("Nested item size verified: {} bytes", f.file_size);
                 info!("Nested item verified and saved: {}", f.filename);
             }
         }
