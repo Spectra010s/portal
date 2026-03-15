@@ -2,7 +2,7 @@ use {
     clap::Parser,
     commands::Commands,
     std::process::exit,
-    tracing::{error, info},
+    tracing::{error, info, trace},
 };
 
 // link files
@@ -40,15 +40,18 @@ struct Cli {
 async fn main() {
     //  Parse the user's input
     let cli = Cli::parse();
+    trace!("CLI arguments parsed successfully");
 
     // start logger
     let _log_guard = logger::init().await;
-    info!(
-        "Initializing Portal v{}..
-    ",
-        env!("CARGO_PKG_VERSION")
-    );
+    trace!("Logger guard initialized");
 
+    info!("Initializing Portal v{}", env!("CARGO_PKG_VERSION"));
+
+    trace!(
+        "Executing command: {:?}",
+        std::env::args().collect::<Vec<_>>()
+    );
     if let Err(e) = cli.command.execute().await {
         error!("Portal Error: {:#}", e);
         eprintln!("Portal Error: {:#}", e);
