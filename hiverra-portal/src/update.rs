@@ -11,6 +11,7 @@ use {
     tar::Archive,
     tempfile::Builder,
     tokio::task::spawn_blocking,
+    tracing::{debug, error, info, warn},
     xz2::read::XzDecoder,
 };
 
@@ -22,7 +23,8 @@ use {
 };
 
 pub async fn update_portal() -> Result<()> {
-    // 1. Fetch latest release
+    //  Fetch latest release
+    info!("Checking for updates on GitHub...");
     let release = spawn_blocking(|| {
         let latest = Update::configure()
             .repo_owner("Spectra010s")
@@ -41,6 +43,7 @@ pub async fn update_portal() -> Result<()> {
 
     // 2. Check if newer
     if bump_is_greater(current_v, &release.version)? {
+        info!("Update available: v{} -> v{}", current_v, release.version);
         println!(
             "New version found: {} (Current: v{})",
             release.version, current_v
@@ -51,6 +54,7 @@ pub async fn update_portal() -> Result<()> {
             .prompt()?;
 
         if !proceed {
+            info!("User cancelled update to v{}", release.version);
             println!("Portal: Update cancelled.");
             return Ok(());
         }
@@ -61,13 +65,16 @@ pub async fn update_portal() -> Result<()> {
         #[cfg(target_os = "windows")]
         {
             spawn_blocking(move || -> Result<()> {
+                info!("Target platform: Windows (MSI)");
                 let tmp_dir = temp_dir();
                 let dest_path = tmp_dir.join("portal_update.msi");
 
-                let asset = release
-                    .asset_for("windows", Some("msi"))
-                    .ok_or_else(|| anyhow!("Could not find MSI for Windows"))?;
+                let asset = release.asset_for("windows", Some("msi")).ok_or_else(|| {
+                    error!("MSI asset not found for Windows");
+                    anyhow!("Could not find MSI for Windows")
+                })?;
 
+                debug!("Downloading MSI from: {}", asset.download_url);
                 let client = Client::builder()
                     .timeout(Duration::from_secs(300))
                     .build()?;
@@ -83,6 +90,7 @@ pub async fn update_portal() -> Result<()> {
                 tmp_file.sync_all()?;
 
                 println!("Portal: Launching installer. This will close the current app...");
+                info!("Executing msiexec for {}", dest_path.display());
                 Command::new("msiexec")
                     .arg("/i")
                     .arg(&dest_path)
@@ -113,11 +121,14 @@ pub async fn update_portal() -> Result<()> {
                     ("hiverra-portal-aarch64-unknown-linux-gnu.tar.xz", false)
                 };
 
+                info!("Selected asset: {}", asset_name);
+
                 let asset = release
                     .asset_for(asset_name, None)
                     .context("Asset not found for this platform")?;
 
                 // Download with streaming to file
+                debug!("Downloading archive from: {}", asset.download_url);
                 let client = Client::builder()
                     .timeout(Duration::from_secs(300))
                     .build()?;
@@ -135,6 +146,7 @@ pub async fn update_portal() -> Result<()> {
                 tmp_file.sync_all()?;
 
                 // Extract archive
+                debug!("Extracting archive to {}", tmp_dir.path().display());
                 let file = File::open(&tmp_file_path)?;
                 if is_gz {
                     let mut archive = Archive::new(GzDecoder::new(file));
@@ -146,6 +158,7 @@ pub async fn update_portal() -> Result<()> {
 
                 // Replace binary
                 let new_bin = tmp_dir.path().join("portal");
+                info!("Replacing binary with {}", new_bin.display());
                 self_replace(&new_bin).context("Binary swap failed")?;
 
                 Ok(())
@@ -154,8 +167,10 @@ pub async fn update_portal() -> Result<()> {
             .context("Update process failed")??;
         }
 
+        info!("Update applied successfully to v{}", release.version);
         println!("Portal: Update successful!");
     } else {
+        debug!("Update check complete. System is up to date.");
         println!("Portal: Already up to date (v{}).", current_v);
     }
 
