@@ -19,8 +19,14 @@ pub struct DirectoryMetadata {
     pub total_size: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TransferItem {
     File(FileMetadata),
     Directory(DirectoryMetadata),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum PortalMeta {
+    Item(TransferItem),
+    NestedFile(FileMetadata),
 }

@@ -137,8 +137,8 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     let target_dir = get_target_dir(&dir).await?;
 
     // receive file or directories
-    let current_reader = BufReader::new(socket);
-    let decoder = GzipDecoder::new(current_reader);
+    let reader = BufReader::new(socket);
+    let decoder = GzipDecoder::new(reader);
     let mut archive = Archive::new(decoder);
 
     // receive the item: fike or directory
