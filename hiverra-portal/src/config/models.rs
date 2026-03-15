@@ -12,6 +12,7 @@ use {
     std::path::PathBuf,
     storage::StorageConfig,
     tokio::fs,
+    tracing::{debug, info, trace, warn},
     user::UserConfig,
 };
 
@@ -27,6 +28,7 @@ impl PortalConfig {
     pub async fn get_dir() -> Result<PathBuf> {
         let mut p = home_dir().ok_or_else(|| anyhow!("Could not find the home directory"))?;
         p.push(".portal");
+        trace!("Resolved config directory path: {:?}", p);
         Ok(p)
     }
 
@@ -47,9 +49,11 @@ impl PortalConfig {
     /// Setup Config for first time
     pub async fn interactive_init() -> Result<Self> {
         println!(" Welcome to Portal! Let's get you set up.");
+        info!("Starting interactive configuration setup...");
 
         let suggested_name = format!("puser_{}", random::<u16>());
         // ask for username
+        trace!("Generating suggested username: {}", suggested_name);
         let user_name = Text::new("What is your username?")
             .with_default(&suggested_name)
             .with_help_message(
@@ -58,6 +62,7 @@ impl PortalConfig {
             )
             .with_formatter(&|val| format!("Username: {}@portal", val))
             .prompt()?;
+        trace!("User selected username: {}", user_name);
 
         // ask for port
         let port = CustomType::<u16>::new("Which port should Portal use?")
@@ -73,6 +78,7 @@ impl PortalConfig {
                 }
             })
             .prompt()?;
+        trace!("User selected port: {}", port);
 
         // ask for downloads directory
 
@@ -81,11 +87,14 @@ impl PortalConfig {
             .join("Downloads")
             .display()
             .to_string();
+        trace!("Default downloads path: {}", default_path);
 
         let dir_string = Text::new("Where should Portal save downloaded files?")
             .with_default(&default_path)
             .with_help_message("Enter a valid folder path.")
             .prompt()?;
+        trace!("User selected download directory: {}", dir_string);
+
         let config = Self {
             user: UserConfig {
                 username: if user_name.ends_with("@portal") {
@@ -102,6 +111,7 @@ impl PortalConfig {
             },
         };
 
+        debug!("Initial configuration built, attempting to save...");
         config.save().await?;
 
         println!("\n Configuration saved! You're ready to use Portal.");
@@ -115,16 +125,20 @@ impl PortalConfig {
         let file_path = dir.join("config.toml");
 
         if !file_path.exists() {
+            trace!("No configuration file found at {:?}", file_path);
             return Ok(None);
         }
 
+        trace!("Loading configuration from {:?}", file_path);
         let content = fs::read_to_string(&file_path)
             .await
             .context("Failed to read config.toml")?;
 
+        trace!("Applying TOML deserialization to config content");
         let config: Self =
             toml::from_str(&content).context("Syntax error in ~/.portal/config.toml")?;
 
+        debug!("Configuration successfully loaded from {:?}", file_path);
         Ok(Some(config))
     }
 
@@ -184,19 +198,27 @@ impl PortalConfig {
     pub async fn save(&self) -> Result<()> {
         let dir = Self::get_dir().await?;
         // Ensure the directory exists
-        fs::create_dir_all(&dir)
-            .await
-            .context("Failed to create config directory")?;
+        trace!("Ensuring configuration directory exists: {:?}", dir);
+        if let Err(e) = fs::create_dir_all(&dir).await {
+            warn!("Could not create config directory at {:?}: {}", dir, e);
+            return Err(e).context("Failed to create config directory");
+        }
 
         let file_path = dir.join("config.toml");
+        trace!("Preparing to write config to {:?}", file_path);
 
         let toml_string =
             toml::to_string_pretty(self).context("Failed to format configuration data")?;
+        trace!(
+            "Serialized configuration size: {} characters",
+            toml_string.len()
+        );
 
-        fs::write(file_path, toml_string)
+        fs::write(&file_path, toml_string)
             .await
             .context("Failed to write to config.toml")?;
 
+        debug!("Configuration successfully saved to {:?}", file_path);
         Ok(())
     }
 }
