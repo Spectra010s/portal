@@ -8,6 +8,7 @@ use {
     tokio::{fs::File, io::AsyncWrite},
     tokio_stream::StreamExt,
     tokio_tar::{Builder, EntryType, Header},
+    tracing::{debug, info, warn},
 };
 
 /// Appends a file or directory to the provided tar builder
@@ -23,6 +24,7 @@ where
             );
 
             // Wrap in PortalMeta::Item and send metadata
+            debug!("Serializing metadata for file: {}", file_meta.filename);
             let meta_bytes = serialize(&PortalMeta::Item(TransferItem::File(file_meta.clone())))?;
             append_raw_meta(builder, meta_bytes).await?;
 
@@ -35,6 +37,10 @@ where
             builder.append(&header, &mut file).await?;
 
             println!("Portal: File '{}' sent successfully!", file_meta.filename);
+            info!(
+                "File '{}' transfer initiated and appended to stream.",
+                file_meta.filename
+            );
         }
 
         TransferItem::Directory(dir_meta) => {
@@ -42,6 +48,10 @@ where
             if dir_meta.total_size == 0 {
                 println!(
                     "Portal: Note: Directory '{}' is empty. Sending structure only.",
+                    dir_meta.dirname
+                );
+                warn!(
+                    "Directory '{}' is empty; sending structure only.",
                     dir_meta.dirname
                 );
             } else {
@@ -52,6 +62,7 @@ where
             }
 
             // Top-level directory metadata
+            debug!("Serializing metadata for directory: {}", dir_meta.dirname);
             let meta_bytes =
                 serialize(&PortalMeta::Item(TransferItem::Directory(dir_meta.clone())))?;
             append_raw_meta(builder, meta_bytes).await?;
@@ -76,6 +87,7 @@ where
 
                 if file_type.is_file() {
                     // Nested file metadata
+                    debug!("Processing nested file: {}", tar_path);
                     let mut file_meta = create_file_metadata(&local_path).await?;
                     file_meta.filename = tar_path.clone();
 
@@ -90,9 +102,10 @@ where
                     header.set_cksum();
                     builder.append(&header, &mut file).await?;
 
-                    println!("Portal: Directory file '{}' sent successfully!", &tar_path);
+                    info!("Directory file sent successfully: {}", &tar_path);
                 } else if file_type.is_dir() {
                     // Subdirectory header
+                    debug!("Processing nested directory: {}", tar_path);
                     let sub_dir_meta = FileMetadata {
                         filename: tar_path.clone(),
                         file_size: 0,
@@ -115,6 +128,7 @@ where
                 "Portal: Directory '{}' sent successfully!",
                 dir_meta.dirname
             );
+            info!("Directory '{}' transfer complete.", dir_meta.dirname);
         }
     }
 
@@ -126,6 +140,10 @@ async fn append_raw_meta<W: AsyncWrite + Unpin + Send>(
     builder: &mut Builder<W>,
     bytes: Vec<u8>,
 ) -> Result<()> {
+    debug!(
+        "Appending metadata header (.portal.meta) - size: {} bytes",
+        bytes.len()
+    );
     let mut header = Header::new_gnu();
     header.set_path(".portal.meta")?;
     header.set_size(bytes.len() as u64);
