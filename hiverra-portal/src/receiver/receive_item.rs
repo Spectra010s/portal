@@ -10,6 +10,7 @@ use {
     },
     tokio_stream::StreamExt,
     tokio_tar::Archive,
+    tracing::{debug, error, info, trace, warn},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -38,23 +39,35 @@ where
     while let Some(entry_result) = entries.next().await {
         let mut entry = entry_result.context("Failed to read tar entry")?;
         let path = entry.path()?.to_path_buf();
+        trace!("--- Processing archive entry {} ---", path.display());
 
         // Catch metadata
         if path.to_string_lossy() == ".portal.meta" {
+            debug!("Caught metadata block (.portal.meta)");
             let mut meta_bytes = Vec::new();
             tokio::io::copy(&mut entry, &mut meta_bytes)
                 .await
                 .context("Failed to read metadata")?;
-            contract = Some(deserialize(&meta_bytes)?);
+            let deserialized: PortalMeta = deserialize(&meta_bytes)?;
+            trace!("Deserialized metadata content: {:?}", deserialized);
+            contract = Some(deserialized);
             continue;
         }
 
         let meta = contract.take().ok_or_else(|| {
+            error!(
+                "Protocol error: {} arrived without preceding metadata",
+                path.display()
+            );
             anyhow!(
                 "Protocol error: data entry '{}' arrived without metadata",
                 path.display()
             )
         })?;
+        trace!(
+            "Matched entry '{}' with its metadata contract.",
+            path.display()
+        );
 
         if let PortalMeta::Item(item) = &meta {
             items_processed += 1;
@@ -69,16 +82,30 @@ where
                     println!(
                         "Portal: Receiving file '{}' ({} bytes)...",
                         f.filename, f.file_size
-                    )
+                    );
+                    info!(
+                        "Incoming top-level file: {} ({} bytes)",
+                        f.filename, f.file_size
+                    );
                 }
-                TransferItem::Directory(d) => println!(
-                    "Portal: Receiving directory '{}' ({} bytes)...",
-                    d.dirname, d.total_size
-                ),
+                TransferItem::Directory(d) => {
+                    println!(
+                        "Portal: Receiving directory '{}' ({} bytes)...",
+                        d.dirname, d.total_size
+                    );
+                    info!(
+                        "Incoming top-level directory: {} ({} bytes)",
+                        d.dirname, d.total_size
+                    );
+                }
             }
 
             // Hard Stop: reject anything beyond the manifest
             if items_processed > total_items {
+                error!(
+                    "SECURITY ALERT: Sender attempted to send more items than manifest allowed ({} > {})",
+                    items_processed, total_items
+                );
                 return Err(anyhow!(
                     "Security Alert: Sender sent more items than manifest allowed"
                 ));
@@ -99,6 +126,10 @@ where
             .filter(|c| matches!(c, std::path::Component::Normal(_)))
             .collect::<PathBuf>();
         let mut final_path = target_dir.join(safe_path);
+        trace!(
+            "Resolved extraction paths: temp={:?}, final={:?}",
+            temp_path, final_path
+        );
 
         // pre-check existence
         let final_exists = try_exists(&final_path).await?;
@@ -106,10 +137,13 @@ where
 
         // handle conflict
         if final_exists && global_strategy != ConflictStrategy::OverwriteAll {
+            warn!("Conflict detected for path: {:?}", final_path);
             if global_strategy == ConflictStrategy::SkipAll {
+                debug!("Strategy SkipAll: skipping {:?}", item_name);
                 continue;
             } else if global_strategy == ConflictStrategy::RenameAll {
                 final_path = get_unused_path(final_path).await;
+                debug!("Strategy RenameAll: new path {:?}", final_path);
             } else {
                 // check user input to know next step
                 let options = vec![
@@ -122,17 +156,29 @@ where
                 ];
                 let ans = Select::new(&format!("Portal: '{}' exists. Action?", item_name), options)
                     .prompt()?;
+                trace!("User selected conflict resolution: {}", ans);
 
                 match ans {
-                    "Overwrite" => (),
-                    "Overwrite All" => global_strategy = ConflictStrategy::OverwriteAll,
-                    "Rename" => final_path = get_unused_path(final_path).await,
+                    "Overwrite" => info!("User chose to overwrite {:?}", item_name),
+                    "Overwrite All" => {
+                        info!("User enabled Overwrite All strategy");
+                        global_strategy = ConflictStrategy::OverwriteAll;
+                    }
+                    "Rename" => {
+                        final_path = get_unused_path(final_path).await;
+                        info!("User chose to rename to {:?}", final_path);
+                    }
                     "Rename All" => {
+                        info!("User enabled Rename All strategy");
                         global_strategy = ConflictStrategy::RenameAll;
                         final_path = get_unused_path(final_path).await;
                     }
-                    "Skip" => continue,
+                    "Skip" => {
+                        info!("User skipped item {:?}", item_name);
+                        continue;
+                    }
                     "Skip All" => {
+                        info!("User enabled Skip All strategy");
                         global_strategy = ConflictStrategy::SkipAll;
                         continue;
                     }
@@ -142,33 +188,43 @@ where
         }
 
         // prepare temp folder
+        trace!("Cleaning/Creating temp directory: {:?}", temp_path);
         if temp_exists {
             let _ = remove_dir_all(&temp_path).await;
         }
         create_dir_all(&temp_path).await?;
 
         if !is_dir {
+            trace!(
+                "Unpacking file to temp storage: {}/{}",
+                temp_path.display(),
+                item_name
+            );
             let file_in_temp = temp_path.join(&item_name);
             let mut outfile = File::create(&file_in_temp).await?;
             tokio::io::copy(&mut entry, &mut outfile).await?;
         }
 
         // move to final location
+        trace!("Moving from temp to final destination: {:?}", final_path);
         if let Some(parent) = final_path.parent() {
             create_dir_all(parent).await?;
         }
         if !is_dir {
             if final_exists {
+                trace!("Overwriting existing file at {:?}", final_path);
                 let _ = remove_file(&final_path).await;
             }
             rename(temp_path.join(item_name), &final_path).await?;
             let _ = remove_dir_all(&temp_path).await;
         } else {
             if final_exists {
+                trace!("Overwriting existing directory at {:?}", final_path);
                 let _ = remove_dir_all(&final_path).await;
             }
             rename(&temp_path, &final_path).await?;
         }
+        debug!("Item finalized at target path: {:?}", final_path);
 
         // validate metadata
         match meta {
@@ -177,21 +233,49 @@ where
                     // Compare for integrity
 
                     if f.filename != path.to_string_lossy() {
+                        error!(
+                            "Filename mismatch: Expected {}, got {}",
+                            f.filename,
+                            path.display()
+                        );
                         return Err(anyhow!("Protocol error: Top-level filename mismatch"));
                     }
                     if f.file_size != entry.header().size()? {
+                        error!(
+                            "Size mismatch for {}: Expected {}, got {}",
+                            f.filename,
+                            f.file_size,
+                            entry.header().size()?
+                        );
+                        trace!(
+                            "Verification failure detail: manifest_size={} vs header_size={}",
+                            f.file_size,
+                            entry.header().size()?
+                        );
                         return Err(anyhow!("Protocol error: Top-level file size mismatch"));
                     }
+                    trace!(
+                        "Self-check: file size matches manifest ({} bytes)",
+                        f.file_size
+                    );
                     println!("Portal: File '{}' received successfully!", f.filename);
+                    info!("Successfully verified and saved: {}", f.filename);
                 }
                 TransferItem::Directory(d) => {
                     if d.dirname != path.to_string_lossy() {
+                        error!(
+                            "Dirname mismatch: Expected {}, got {}",
+                            d.dirname,
+                            path.display()
+                        );
                         return Err(anyhow!("Protocol error: Top-level directory name mismatch"));
                     }
                     println!("Portal: Directory '{}' received successfully!", d.dirname);
+                    info!("Successfully verified and saved directory: {}", d.dirname);
                 }
             },
             PortalMeta::NestedFile(f) => {
+                debug!("Verifying nested item: {}", f.filename);
                 if f.filename != path.to_string_lossy() {
                     return Err(anyhow!(
                         "Protocol error: Directory filename mismatch. Expected '{}', got '{}'",
@@ -201,21 +285,34 @@ where
                 }
                 // Compare size for integrity
                 if !is_dir && f.file_size != entry.header().size()? {
+                    trace!(
+                        "Nested file verification failure: {} (manifest: {}, header: {})",
+                        f.filename,
+                        f.file_size,
+                        entry.header().size()?
+                    );
                     return Err(anyhow!(
                         "Protocol error: Directory file size mismatch for '{}'",
                         f.filename
                     ));
                 }
+                trace!("Nested item size verified: {} bytes", f.file_size);
+                info!("Nested item verified and saved: {}", f.filename);
             }
         }
     }
     if items_processed != total_items {
+        error!(
+            "Transfer failed: manifest expected {} items, only received {}",
+            total_items, items_processed
+        );
         return Err(anyhow!(
             "Transfer incomplete: Expected {} items, only got {}",
             total_items,
             items_processed
         ));
     }
+    info!("All {} items received and verified.", items_processed);
     Ok(())
 }
 
@@ -236,6 +333,7 @@ async fn get_unused_path(path: PathBuf) -> PathBuf {
     loop {
         let new_path = parent.join(format!("{} ({}){}", stem, n, ext));
         if !try_exists(&new_path).await.unwrap_or(false) {
+            debug!("Generated unique path: {:?}", new_path);
             return new_path;
         }
         n += 1;
