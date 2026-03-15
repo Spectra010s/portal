@@ -22,7 +22,7 @@ use {
     },
     tokio_stream::StreamExt,
     tokio_tar::Builder,
-    tracing::{debug, error, info, warn},
+    tracing::{debug, error, info, trace, warn},
 };
 
 pub async fn create_file_metadata(path: &PathBuf) -> Result<FileMetadata> {
@@ -48,15 +48,20 @@ async fn create_directory_metadata(dir: &PathBuf) -> Result<DirectoryMetadata> {
     // We walk the directory once to get the total size for the Global Manifest
     while let Some(entry) = entries.next().await {
         let entry = entry.context("Portal: Failed to read directory entry for metadata")?;
+        let entry_path = entry.path();
+        trace!("Scanning path for size calculation: {:?}", entry_path);
+        
         let file_type = entry.file_type().await?;
 
         if file_type.is_file() {
             if let Ok(meta) = entry.metadata().await {
+                trace!("Found file: {:?} ({} bytes)", entry_path, meta.len());
                 total_size += meta.len();
             }
         }
     }
 
+    debug!("Directory size calculation complete: {} bytes total for {:?}", total_size, dir);
     Ok(DirectoryMetadata {
         dirname: dir
             .file_name()
@@ -99,6 +104,7 @@ pub async fn start_send(
         }
     };
 
+    trace!("Validating existence and type of {} input items", files.len());
     for file in &files {
         if !file.exists() {
             error!("Path does not exist: {:?}", file);
@@ -107,6 +113,7 @@ pub async fn start_send(
                 file.display()
             ));
         }
+        trace!("Verified path exists: {:?}", file);
         if file.is_dir() {
             if !recursive {
                 warn!("Directory encountered without recursive flag: {:?}", file);
@@ -115,6 +122,7 @@ pub async fn start_send(
                     file.display(),
                 ));
             }
+            trace!("Path is a directory, recursive flag is set.");
         }
     }
     //  Username discovery connection Logic
@@ -140,6 +148,7 @@ pub async fn start_send(
         ).await.context("Portal: Search timed out. Make sure the receiver is active and on the same network.")??;
 
         let (ip, id, p) = discovery_result;
+        debug!("Parsed discovery result: ip={}, id={}, port={}", ip, id, p);
         info!("Receiver found at {}:{} (Node ID: {})", ip, p, id);
         (ip, Some(id), p)
     };
@@ -158,12 +167,16 @@ pub async fn start_send(
     let mut id_len_buf = [0u8; 4];
     stream.read_exact(&mut id_len_buf).await?;
     let id_len = u32::from_be_bytes(id_len_buf) as usize;
+    trace!("Target claimed ID length: {} bytes", id_len);
 
     let mut id_buf = vec![0u8; id_len];
     stream.read_exact(&mut id_buf).await?;
     let claimed_id = String::from_utf8(id_buf)?;
+    trace!("Target claimed ID string: {}", claimed_id);
+    
     // Verify it matches what we heard in the beacon
     if let Some(expected_id) = target_node_id {
+        trace!("Verifying claimed ID against expected beacon ID: {}", expected_id);
         println!("Portal: Verifying identity...");
         if claimed_id != expected_id {
             error!(
@@ -198,6 +211,7 @@ pub async fn start_send(
     let mut items_to_send: Vec<(PathBuf, TransferItem)> = Vec::new();
 
     for path in &files {
+        trace!("Preparing item: {:?}", path);
         if path.is_dir() {
             let dir_meta = create_directory_metadata(path).await?;
             items_to_send.push((path.clone(), TransferItem::Directory(dir_meta)));
@@ -206,6 +220,7 @@ pub async fn start_send(
             items_to_send.push((path.clone(), TransferItem::File(file_meta)));
         }
     }
+    debug!("Successfully collected {} top-level items for manifest", items_to_send.len());
 
     let (file_items, dir_items) = items_to_send
         .iter()
@@ -218,8 +233,11 @@ pub async fn start_send(
     // Serialize and send global manifest
     debug!("Sending serialized global manifest...");
     let encoded_global = serialize(&global_manifest)?;
+    let manifest_len = encoded_global.len() as u32;
+    trace!("Serialized manifest size: {} bytes", manifest_len);
+    
     stream
-        .write_all(&(encoded_global.len() as u32).to_be_bytes())
+        .write_all(&manifest_len.to_be_bytes())
         .await?;
     stream.write_all(&encoded_global).await?;
 
@@ -263,10 +281,13 @@ pub async fn start_send(
         .shutdown()
         .await
         .context("Failed to shutdown compressor")?;
+    trace!("Compressor shutdown complete.");
 
     // flush the underlying stream to ensure bytes are actually sent
     let mut stream = compressor.into_inner();
+    trace!("Flushing underlying TCP stream...");
     stream.flush().await?;
+    debug!("TCP stream flush complete.");
 
     info!(
         "SUCCESS: All {} items sent and stream flushed to {}",
