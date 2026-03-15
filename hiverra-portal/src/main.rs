@@ -1,5 +1,9 @@
-use clap::Parser;
-use std::process::exit;
+use {
+    clap::Parser,
+    commands::Commands,
+    std::process::exit,
+    tracing::{error, info, trace},
+};
 
 // link files
 mod commands;
@@ -20,7 +24,7 @@ mod discovery {
     pub mod listener;
     pub mod protocol;
 }
-use commands::Commands;
+mod logger;
 
 // 1. Defining the Map (The Struct)
 #[derive(Parser)]
@@ -34,16 +38,23 @@ struct Cli {
 
 #[tokio::main]
 async fn main() {
-    // 3. Parse the user's input
+    //  Parse the user's input
     let cli = Cli::parse();
+    trace!("CLI arguments parsed successfully");
 
-    // 4. Act on the input
-    // Since execute() now returns a Result, we check if it's an Error (Err)
+    // start logger
+    let _log_guard = logger::init().await;
+    trace!("Logger guard initialized");
+
+    info!("Initializing Portal v{}", env!("CARGO_PKG_VERSION"));
+
+    trace!(
+        "Executing command: {:?}",
+        std::env::args().collect::<Vec<_>>()
+    );
     if let Err(e) = cli.command.execute().await {
-        // eprint! prints to the 'Standard Error' stream instead of 'Standard Output'
-        // {:?} prints the error message plus all the .context() notes we added
+        error!("Portal Error: {:#}", e);
         eprintln!("Portal Error: {:#}", e);
-
         // Exit with a non-zero code to tell the OS that the program failed
         exit(1);
     }

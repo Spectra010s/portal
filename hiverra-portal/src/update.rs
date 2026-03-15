@@ -11,6 +11,7 @@ use {
     tar::Archive,
     tempfile::Builder,
     tokio::task::spawn_blocking,
+    tracing::{debug, error, info, trace, warn},
     xz2::read::XzDecoder,
 };
 
@@ -22,8 +23,13 @@ use {
 };
 
 pub async fn update_portal() -> Result<()> {
-    // 1. Fetch latest release
+    //  Fetch latest release
+    info!("Checking for updates on GitHub...");
     let release = spawn_blocking(|| {
+        debug!(
+            "Querying GitHub API (Spectra010s/portal) for releases newer than v{}",
+            cargo_crate_version!()
+        );
         let latest = Update::configure()
             .repo_owner("Spectra010s")
             .repo_name("portal")
@@ -32,18 +38,22 @@ pub async fn update_portal() -> Result<()> {
             .build()?
             .get_latest_release()
             .context("Failed to fetch latest release from GitHub")?;
+
+        trace!("GitHub API responded with release metadata: {:?}", latest);
         Ok::<Release, Error>(latest)
     })
     .await
     .context("Updating failed")??;
 
     let current_v = cargo_crate_version!();
+    let new_version = release.version.clone();
 
-    // 2. Check if newer
-    if bump_is_greater(current_v, &release.version)? {
+    // Check if newer
+    if bump_is_greater(current_v, &new_version)? {
+        info!("Update available: v{} -> v{}", current_v, new_version);
         println!(
             "New version found: {} (Current: v{})",
-            release.version, current_v
+            new_version, current_v
         );
 
         let proceed = Confirm::new("Portal: Do you want to update?")
@@ -51,6 +61,7 @@ pub async fn update_portal() -> Result<()> {
             .prompt()?;
 
         if !proceed {
+            info!("User cancelled update to v{}", new_version);
             println!("Portal: Update cancelled.");
             return Ok(());
         }
@@ -61,13 +72,16 @@ pub async fn update_portal() -> Result<()> {
         #[cfg(target_os = "windows")]
         {
             spawn_blocking(move || -> Result<()> {
+                info!("Target platform: Windows (MSI)");
                 let tmp_dir = temp_dir();
                 let dest_path = tmp_dir.join("portal_update.msi");
 
-                let asset = release
-                    .asset_for("windows", Some("msi"))
-                    .ok_or_else(|| anyhow!("Could not find MSI for Windows"))?;
+                let asset = release.asset_for("windows", Some("msi")).ok_or_else(|| {
+                    error!("MSI asset not found for Windows");
+                    anyhow!("Could not find MSI for Windows")
+                })?;
 
+                debug!("Downloading MSI from: {}", asset.download_url);
                 let client = Client::builder()
                     .timeout(Duration::from_secs(300))
                     .build()?;
@@ -78,11 +92,20 @@ pub async fn update_portal() -> Result<()> {
                     .send()?
                     .error_for_status()?;
 
+                trace!(
+                    "Download connected. Status: {}, Content-Length: {:?}",
+                    response.status(),
+                    response.content_length()
+                );
+
                 let mut tmp_file = File::create(&dest_path)?;
+                debug!("Streaming payload to temporary file...");
                 response.copy_to(&mut tmp_file)?;
                 tmp_file.sync_all()?;
+                debug!("Download complete and synced to disk.");
 
                 println!("Portal: Launching installer. This will close the current app...");
+                info!("Executing msiexec for {}", dest_path.display());
                 Command::new("msiexec")
                     .arg("/i")
                     .arg(&dest_path)
@@ -113,11 +136,14 @@ pub async fn update_portal() -> Result<()> {
                     ("hiverra-portal-aarch64-unknown-linux-gnu.tar.xz", false)
                 };
 
+                info!("Selected asset: {}", asset_name);
+
                 let asset = release
                     .asset_for(asset_name, None)
                     .context("Asset not found for this platform")?;
 
                 // Download with streaming to file
+                debug!("Downloading archive from: {}", asset.download_url);
                 let client = Client::builder()
                     .timeout(Duration::from_secs(300))
                     .build()?;
@@ -128,25 +154,44 @@ pub async fn update_portal() -> Result<()> {
                     .send()?
                     .error_for_status()?;
 
+                trace!(
+                    "Download connected. Status: {}, Content-Length: {:?}",
+                    response.status(),
+                    response.content_length()
+                );
+
                 let tmp_dir = Builder::new().prefix("portal-").tempdir()?;
                 let tmp_file_path = tmp_dir.path().join(asset_name);
                 let mut tmp_file = File::create(&tmp_file_path)?;
+
+                debug!("Streaming payload to temporary file...");
                 response.copy_to(&mut tmp_file)?;
                 tmp_file.sync_all()?;
+                debug!("Download complete and synced to disk.");
 
                 // Extract archive
+                debug!("Extracting archive to {}", tmp_dir.path().display());
                 let file = File::open(&tmp_file_path)?;
                 if is_gz {
+                    trace!("Using GzDecoder for extraction...");
                     let mut archive = Archive::new(GzDecoder::new(file));
                     archive.unpack(tmp_dir.path())?;
                 } else {
+                    trace!("Using XzDecoder for extraction...");
                     let mut archive = Archive::new(XzDecoder::new(file));
                     archive.unpack(tmp_dir.path())?;
                 }
+                debug!("Archive extracted successfully.");
 
                 // Replace binary
                 let new_bin = tmp_dir.path().join("portal");
-                self_replace(&new_bin).context("Binary swap failed")?;
+                info!("Replacing binary with {}", new_bin.display());
+
+                if let Err(e) = self_replace(&new_bin) {
+                    error!("self_replace failed: {}", e);
+                    return Err(e).context("Binary swap failed");
+                }
+                debug!("Binary replaced successfully.");
 
                 Ok(())
             })
@@ -154,8 +199,10 @@ pub async fn update_portal() -> Result<()> {
             .context("Update process failed")??;
         }
 
+        info!("Update applied successfully to v{}", new_version);
         println!("Portal: Update successful!");
     } else {
+        debug!("Update check complete. System is up to date.");
         println!("Portal: Already up to date (v{}).", current_v);
     }
 
