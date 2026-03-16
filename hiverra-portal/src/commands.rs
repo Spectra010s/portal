@@ -45,6 +45,21 @@ pub enum Commands {
     },
     /// Update portal to latest version
     Update,
+    /// Show transfer history
+    History {
+        /// Limit number of records shown
+        #[arg(long, default_value_t = 20)]
+        limit: u32,
+        /// Output in JSON format
+        #[arg(long)]
+        json: bool,
+        /// Filter by direction (send|receive)
+        #[arg(long = "type", value_name = "send|receive", value_parser = ["send", "receive"])]
+        kind: Option<String>,
+        /// Filter by date (e.g., 2026-03-16)
+        #[arg(long, value_name = "YYYY-MM-DD")]
+        since: Option<String>,
+    },
     /// Configuration Settings management
     Config {
         #[command(subcommand)]
@@ -110,6 +125,19 @@ impl Commands {
                     .await
                     .context("Failed to execute Update commamd")?;
                 trace!("update::update_portal() completed successfully");
+            }
+            Commands::History {
+                limit,
+                json,
+                kind,
+                since,
+            } => {
+                info!("Command: HISTORY initiated");
+                debug!(
+                    "Params: limit={}, json={}, type={:?}, since={:?}",
+                    limit, json, kind, since
+                );
+                println!("Portal: History command not implemented yet.");
             }
             Commands::Config { action } => match action {
                 ConfigAction::Set { key, value } => {
