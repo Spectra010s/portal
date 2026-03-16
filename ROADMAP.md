@@ -1,6 +1,5 @@
 # Portal Roadmap (Updated)
 
-
 There are currently 6 Feature issues, including a bug, if we look at the dependencies between these 6 issues, some are structural (how the app is built) and some are behavioral (how the app acts).
 
 Here is the strategic breakdown of the 6 issues and which will be done first:
@@ -21,12 +20,13 @@ Here is the strategic breakdown of the 6 issues and which will be done first:
 
 - Goal: Security and Consent. we need the user.username from [Issue 3](https://github.com/Spectra010s/portal/issues/31) to be solid before we start sending it over the wire. [X]
 
-4. Multiple File Support (New) Why: This is a structural change to the protocol. Before we can show a progress bar or retry a connection, the pipe needs to know if it's carrying one file or a hundred.
+4. Multiple File Support
+   Why: This is a structural change to the protocol. Before we can show a progress bar or retry a connection, the pipe needs to know if it's carrying one file or a hundred.
 
 - Goal: Allow the sender to pass a list of paths.
 - Impact: Requires a "Manifest" header (JSON) sent over TCP before the data starts, so the receiver knows how many files to expect and their sizes. [X]
 
-5. Folder Recursive Sending (New)
+5. Folder Recursive Sending
    Why: Sending a folder is just "Multiple Files" with directory logic.
 
 - Goal: portal send ./my_folder should automatically walk the directory tree.
@@ -35,19 +35,24 @@ Here is the strategic breakdown of the 6 issues and which will be done first:
 6. Progress Bars with indicatif [(Issue 18)](https://github.com/Spectra010s/portal/issues/18)
    Why: This is "UI Polish." It’s much easier to implement once we file transfer logic (the handshake and stream) is finalized.
 
-- Goal: Show a smooth [===> ] 45% bar during the transfer. []
+- Goal: Show a smooth [===> ] 45% bar during the transfer. [X]
 
 7. Logging System [(Issue 4)](https://github.com/Spectra010s/portal/issues/5)
    Why: As the app gets complex (retries, handshakes, directory creation), we need a way to see what went wrong without using println!.
 
-- Goal: Implement tracing or log crates to save errors to a file. []
+- Goal: Implement tracing or log crates to save errors to a file. [X]
 
-8. Polling and Retry Logic [(Issue 26)](https://github.com/Spectra010s/portal/issues/26)
+8. Transfer History (Persistent)
+   Why: Keep a user-visible history of sends/receives (items, sizes, timestamps) beyond runtime logs.
+
+- Goal: Record transfer summaries to a queryable history file or store. []
+
+9. Polling and Retry Logic [(Issue 26)](https://github.com/Spectra010s/portal/issues/26)
    Why: This is the most complex "Quality of Life" feature. It handles dirty networks.
 
 - Goal: If the connection drops during the handshake or transfer, the sender doesn't just quit; it tries again 3 times. []
 
-9. TUI Progress Header (Sticky Top Line)
-   Why: A proper TUI is needed to keep the "Sending/Receiving item X of Y" header fixed while file bars and logs scroll beneath it.
+10. TUI Progress Header (Sticky Top Line)
+    Why: A proper TUI is needed to keep the "Sending/Receiving item X of Y" header fixed while file bars and logs scroll beneath it.
 
 - Goal: Implement a `ratatui`-style interface that pins the header and avoids line redraw artifacts. []
