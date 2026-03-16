@@ -56,3 +56,8 @@ Here is the strategic breakdown of the 6 issues and which will be done first:
     Why: A proper TUI is needed to keep the "Sending/Receiving item X of Y" header fixed while file bars and logs scroll beneath it.
 
 - Goal: Implement a `ratatui`-style interface that pins the header and avoids line redraw artifacts. []
+
+11. No-Compression Mode (New)
+    Why: Gzip can throttle throughput for large transfers; a switch to disable compression helps performance troubleshooting and fast LAN sends.
+
+- Goal: Add a `--no-compress` flag to bypass gzip for sender/receiver. []
