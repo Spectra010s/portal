@@ -4,6 +4,7 @@ use {
     crate::{
         discovery::listener::find_receiver,
         metadata::{DirectoryMetadata, FileMetadata, GlobalTransferManifest, TransferItem},
+        progress::ProgressManager,
         select::select_files_to_send,
     },
     anyhow::{Context, Result, anyhow},
@@ -264,18 +265,79 @@ pub async fn start_send(
     let total_items = items_to_send.len();
     println!("Portal: Preparing to send {} items(s)...", total_items);
 
+    // progress manager
+    let prog = ProgressManager::new();
+    debug!("Progress UI created for sender");
+    prog.set_total_items(total_items);
+    trace!("Progress UI initialized with total_items={}", total_items);
+
     debug!("Initializing Gzip encoder and Tar builder...");
     let compressor = GzipEncoder::new(stream);
     let mut builder = Builder::new(compressor);
 
     info!("Starting TAR stream to network...");
     for (index, (path, item)) in items_to_send.into_iter().enumerate() {
-        println!("Portal: Sending item {} of {}", index + 1, total_items);
         debug!("Processing item {}: {:?}", index + 1, path);
 
-        send_item(&mut builder, path, item)
-            .await
-            .context("Failed to append item to tarball")?;
+        // prepare per-file progress bar and pass a clone into send_item
+        match item {
+            TransferItem::File(fm) => {
+                trace!(
+                    "Progress UI: starting file item '{}' ({} bytes)",
+                    fm.filename,
+                    fm.file_size
+                );
+                prog.set_current_item(index + 1, total_items);
+                let filename = fm.filename.clone();
+                let file_size = fm.file_size;
+                let pb = prog.create_file_bar(&filename, file_size);
+                send_item(
+                    &mut builder,
+                    path,
+                    TransferItem::File(fm),
+                    Some(pb.clone()),
+                )
+                    .await
+                    .context("Failed to append item to tarball")?;
+                pb.finish_and_clear();
+                prog.println(format!(
+                    "Portal: File '{}' sent successfully!",
+                    filename
+                ));
+                trace!("Progress UI: completed file item '{}'", filename);
+            }
+            TransferItem::Directory(dm) => {
+                trace!(
+                    "Progress UI: starting directory item '{}' ({} bytes)",
+                    dm.dirname,
+                    dm.total_size
+                );
+                prog.set_current_item(index + 1, total_items);
+                let dirname = dm.dirname.clone();
+                let total_size = dm.total_size;
+                if dm.total_size == 0 {
+                    prog.println(format!(
+                        "Portal: Note: Directory '{}' is empty. Sending structure only.",
+                        dirname
+                    ));
+                }
+                let pb = prog.create_file_bar(&dirname, total_size);
+                send_item(
+                    &mut builder,
+                    path,
+                    TransferItem::Directory(dm),
+                    Some(pb.clone()),
+                )
+                    .await
+                    .context("Failed to append item to tarball")?;
+                pb.finish_and_clear();
+                prog.println(format!(
+                    "Portal: Directory '{}' sent successfully!",
+                    dirname
+                ));
+                trace!("Progress UI: completed directory item '{}'", dirname);
+            }
+        }
     }
 
     // finalize the Tar archive
@@ -303,7 +365,7 @@ pub async fn start_send(
         total_items, r_addr
     );
 
-    println!("Portal: All file(s) have been sent successfully!");
+    prog.println("Portal: All file(s) have been sent successfully!");
 
     Ok(())
 }

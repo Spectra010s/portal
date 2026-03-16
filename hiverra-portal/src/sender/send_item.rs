@@ -9,20 +9,21 @@ use {
     tokio_stream::StreamExt,
     tokio_tar::{Builder, EntryType, Header},
     tracing::{debug, info, trace, warn},
+    indicatif::ProgressBar,
 };
 
 /// Appends a file or directory to the provided tar builder
-pub async fn send_item<W>(builder: &mut Builder<W>, path: PathBuf, item: TransferItem) -> Result<()>
+pub async fn send_item<W>(builder: &mut Builder<W>, path: PathBuf, item: TransferItem, file_pb: Option<ProgressBar>) -> Result<()>
 where
     W: AsyncWrite + Unpin + Send,
 {
     match item {
         TransferItem::File(file_meta) => {
-            println!(
-                "Portal: Preparing to send '{}' ({} bytes)...",
-                file_meta.filename, file_meta.file_size
+            trace!(
+                "Progress UI: streaming file payload '{}' ({} bytes)",
+                file_meta.filename,
+                file_meta.file_size
             );
-
             // Wrap in PortalMeta::Item and send metadata
             debug!("Serializing metadata for file: {}", file_meta.filename);
             let meta_bytes = serialize(&PortalMeta::Item(TransferItem::File(file_meta.clone())))?;
@@ -30,7 +31,7 @@ where
             append_raw_meta(builder, meta_bytes).await?;
 
             trace!("Opening file for reading: {:?}", path);
-            let mut file = File::open(&path).await?;
+            let file = File::open(&path).await?;
             let mut header = Header::new_gnu();
             header.set_path(&file_meta.filename)?;
             header.set_size(file_meta.file_size);
@@ -38,9 +39,14 @@ where
             header.set_cksum();
 
             trace!("Appending file '{}' to tar archive", file_meta.filename);
-            builder.append(&header, &mut file).await?;
+            if let Some(pb) = file_pb.clone() {
+                let mut reader = pb.wrap_async_read(file);
+                builder.append(&header, &mut reader).await?;
+            } else {
+                let mut f = file;
+                builder.append(&header, &mut f).await?;
+            }
 
-            println!("Portal: File '{}' sent successfully!", file_meta.filename);
             info!(
                 "File '{}' transfer initiated and appended to stream.",
                 file_meta.filename
@@ -48,20 +54,16 @@ where
         }
 
         TransferItem::Directory(dir_meta) => {
+            trace!(
+                "Progress UI: streaming directory payload '{}' ({} bytes)",
+                dir_meta.dirname,
+                dir_meta.total_size
+            );
             // tell user they are sending empty dir if empty
             if dir_meta.total_size == 0 {
-                println!(
-                    "Portal: Note: Directory '{}' is empty. Sending structure only.",
-                    dir_meta.dirname
-                );
                 warn!(
                     "Directory '{}' is empty; sending structure only.",
                     dir_meta.dirname
-                );
-            } else {
-                println!(
-                    "Portal: Preparing to send directory '{}' ({} bytes)...",
-                    &dir_meta.dirname, dir_meta.total_size
                 );
             }
 
@@ -116,7 +118,7 @@ where
                     append_raw_meta(builder, meta_bytes).await?;
 
                     trace!("Opening nested file: {:?}", local_path);
-                    let mut file = File::open(&local_path).await?;
+                    let file = File::open(&local_path).await?;
                     let mut header = Header::new_gnu();
                     header.set_path(&tar_path)?;
                     header.set_size(file.metadata().await?.len());
@@ -124,7 +126,13 @@ where
                     header.set_cksum();
 
                     trace!("Appending nested file '{}' to tar archive", tar_path);
-                    builder.append(&header, &mut file).await?;
+                    if let Some(pb) = file_pb.clone() {
+                        let mut reader = pb.wrap_async_read(file);
+                        builder.append(&header, &mut reader).await?;
+                    } else {
+                        let mut f = file;
+                        builder.append(&header, &mut f).await?;
+                    }
 
                     info!("Directory file sent successfully: {}", &tar_path);
                 } else if file_type.is_dir() {
@@ -151,10 +159,6 @@ where
                 }
             }
 
-            println!(
-                "Portal: Directory '{}' sent successfully!",
-                dir_meta.dirname
-            );
             info!("Directory '{}' transfer complete.", dir_meta.dirname);
         }
     }
