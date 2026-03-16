@@ -47,3 +47,7 @@ Here is the strategic breakdown of the 6 issues and which will be done first:
 
 - Goal: If the connection drops during the handshake or transfer, the sender doesn't just quit; it tries again 3 times. []
 
+9. TUI Progress Header (Sticky Top Line)
+   Why: A proper TUI is needed to keep the "Sending/Receiving item X of Y" header fixed while file bars and logs scroll beneath it.
+
+- Goal: Implement a `ratatui`-style interface that pins the header and avoids line redraw artifacts. []

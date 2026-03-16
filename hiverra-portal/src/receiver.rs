@@ -4,8 +4,10 @@ mod receive_item;
 
 use {
     crate::{
-        config::models::PortalConfig, discovery::beacon::start_beacon,
+        config::models::PortalConfig,
+        discovery::beacon::start_beacon,
         metadata::GlobalTransferManifest,
+        progress::{ProgressManager, Side},
     },
     anyhow::{Context, Result, anyhow},
     async_compression::tokio::bufread::GzipDecoder,
@@ -19,7 +21,7 @@ use {
         net::TcpListener,
     },
     tokio_tar::Archive,
-    tracing::{debug, error, info, trace, warn},
+    tracing::{debug, error, info, trace},
     uuid::Uuid,
 };
 
@@ -171,8 +173,14 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     let decoder = GzipDecoder::new(reader);
     let mut archive = Archive::new(decoder);
 
+    // progress manager for receiver UI
+    let prog = ProgressManager::new_with_side(Side::Receiver);
+    debug!("Progress UI created for receiver");
+    prog.set_total_items(total_items as usize);
+    trace!("Progress UI initialized with total_items={}", total_items);
+
     // receive the item: file or directory
-    receive_item(&mut archive, &target_dir, total_items).await?;
+    receive_item(&mut archive, &target_dir, total_items, Some(prog.clone())).await?;
     trace!("receive_item recursive loop completed.");
 
     debug!("Extraction complete. Recovering stream...");
@@ -189,10 +197,10 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
         "SUCCESS: Transfer completed. Saved to {}",
         target_dir.display()
     );
-    println!(
+    prog.println(format!(
         "Portal: All item(s) have been received successfully! Saved to '{}'",
         target_dir.display()
-    );
+    ));
 
     Ok(())
 }
