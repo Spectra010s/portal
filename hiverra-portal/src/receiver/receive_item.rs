@@ -1,5 +1,9 @@
 use {
-    crate::metadata::{PortalMeta, TransferItem},
+    crate::{
+        progress::ProgressManager,
+        metadata::{PortalMeta, TransferItem},
+    },
+    indicatif::ProgressBar,
     anyhow::{Context, Result, anyhow},
     bincode::deserialize,
     inquire::Select,
@@ -27,6 +31,7 @@ pub async fn receive_item<R>(
     archive: &mut Archive<R>,
     target_dir: &PathBuf,
     total_items: u32,
+    prog: Option<ProgressManager>,
 ) -> Result<()>
 where
     R: AsyncRead + Unpin + Send,
@@ -34,11 +39,14 @@ where
     let mut contract: Option<PortalMeta> = None;
     let mut global_strategy = ConflictStrategy::Prompt;
     let mut items_processed: u32 = 0;
+    let mut active_dir_pb: Option<ProgressBar> = None;
+    let mut pending_dir_success: Option<String> = None;
 
     let mut entries = archive.entries()?;
     while let Some(entry_result) = entries.next().await {
         let mut entry = entry_result.context("Failed to read tar entry")?;
         let path = entry.path()?.to_path_buf();
+        let entry_size = entry.header().size()?;
         trace!("--- Processing archive entry {} ---", path.display());
 
         // Catch metadata
@@ -69,19 +77,20 @@ where
             path.display()
         );
 
+        let mut entry_pb: Option<ProgressBar> = None;
         if let PortalMeta::Item(item) = &meta {
             items_processed += 1;
 
-            println!(
-                "Portal: Receiving item {}/{}...",
-                items_processed, total_items
-            );
+            if let Some(pm) = &prog {
+                pm.set_current_item(items_processed as usize, total_items as usize);
+            }
 
             match item {
                 TransferItem::File(f) => {
-                    println!(
-                        "Portal: Receiving file '{}' ({} bytes)...",
-                        f.filename, f.file_size
+                    trace!(
+                        "Progress UI: starting file item '{}' ({} bytes)",
+                        f.filename,
+                        f.file_size
                     );
                     info!(
                         "Incoming top-level file: {} ({} bytes)",
@@ -89,9 +98,10 @@ where
                     );
                 }
                 TransferItem::Directory(d) => {
-                    println!(
-                        "Portal: Receiving directory '{}' ({} bytes)...",
-                        d.dirname, d.total_size
+                    trace!(
+                        "Progress UI: starting directory item '{}' ({} bytes)",
+                        d.dirname,
+                        d.total_size
                     );
                     info!(
                         "Incoming top-level directory: {} ({} bytes)",
@@ -109,6 +119,33 @@ where
                 return Err(anyhow!(
                     "Security Alert: Sender sent more items than manifest allowed"
                 ));
+            }
+
+            // Close any active directory progress bar before starting a new top-level item
+            if let Some(pb) = active_dir_pb.take() {
+                pb.finish_and_clear();
+                if let Some(dir_name) = pending_dir_success.take() {
+                    if let Some(pm) = &prog {
+                        pm.println(format!(
+                            "Portal: Directory '{}' received successfully!",
+                            dir_name
+                        ));
+                    } else {
+                        println!("Portal: Directory '{}' received successfully!", dir_name);
+                    }
+                }
+            }
+
+            if let Some(pm) = &prog {
+                match item {
+                    TransferItem::File(f) => {
+                        entry_pb = Some(pm.create_file_bar(&f.filename, f.file_size));
+                    }
+                    TransferItem::Directory(d) => {
+                        active_dir_pb = Some(pm.create_file_bar(&d.dirname, d.total_size));
+                        pending_dir_success = Some(d.dirname.clone());
+                    }
+                }
             }
         }
 
@@ -202,7 +239,18 @@ where
             );
             let file_in_temp = temp_path.join(&item_name);
             let mut outfile = File::create(&file_in_temp).await?;
-            tokio::io::copy(&mut entry, &mut outfile).await?;
+
+            // Top-level file bar (if present), otherwise reuse active directory bar.
+            if let Some(pb) = entry_pb.take() {
+                let mut writer = pb.wrap_async_write(outfile);
+                tokio::io::copy(&mut entry, &mut writer).await?;
+                pb.finish_and_clear();
+            } else if let Some(pb) = &active_dir_pb {
+                let mut reader = pb.wrap_async_read(entry);
+                tokio::io::copy(&mut reader, &mut outfile).await?;
+            } else {
+                tokio::io::copy(&mut entry, &mut outfile).await?;
+            }
         }
 
         // move to final location
@@ -240,17 +288,14 @@ where
                         );
                         return Err(anyhow!("Protocol error: Top-level filename mismatch"));
                     }
-                    if f.file_size != entry.header().size()? {
+                    if f.file_size != entry_size {
                         error!(
                             "Size mismatch for {}: Expected {}, got {}",
-                            f.filename,
-                            f.file_size,
-                            entry.header().size()?
+                            f.filename, f.file_size, entry_size
                         );
                         trace!(
                             "Verification failure detail: manifest_size={} vs header_size={}",
-                            f.file_size,
-                            entry.header().size()?
+                            f.file_size, entry_size
                         );
                         return Err(anyhow!("Protocol error: Top-level file size mismatch"));
                     }
@@ -258,8 +303,13 @@ where
                         "Self-check: file size matches manifest ({} bytes)",
                         f.file_size
                     );
-                    println!("Portal: File '{}' received successfully!", f.filename);
+                    if let Some(pm) = &prog {
+                        pm.println(&format!("Portal: File '{}' received successfully!", f.filename));
+                    } else {
+                        println!("Portal: File '{}' received successfully!", f.filename);
+                    }
                     info!("Successfully verified and saved: {}", f.filename);
+                    trace!("Progress UI: completed file item '{}'", f.filename);
                 }
                 TransferItem::Directory(d) => {
                     if d.dirname != path.to_string_lossy().replace('\\', "/") {
@@ -270,8 +320,8 @@ where
                         );
                         return Err(anyhow!("Protocol error: Top-level directory name mismatch"));
                     }
-                    println!("Portal: Directory '{}' received successfully!", d.dirname);
                     info!("Successfully verified and saved directory: {}", d.dirname);
+                    trace!("Progress UI: completed directory item '{}'", d.dirname);
                 }
             },
             PortalMeta::NestedFile(f) => {
@@ -284,12 +334,10 @@ where
                     ));
                 }
                 // Compare size for integrity
-                if !is_dir && f.file_size != entry.header().size()? {
+                if !is_dir && f.file_size != entry_size {
                     trace!(
                         "Nested file verification failure: {} (manifest: {}, header: {})",
-                        f.filename,
-                        f.file_size,
-                        entry.header().size()?
+                        f.filename, f.file_size, entry_size
                     );
                     return Err(anyhow!(
                         "Protocol error: Directory file size mismatch for '{}'",
@@ -298,6 +346,19 @@ where
                 }
                 trace!("Nested item size verified: {} bytes", f.file_size);
                 info!("Nested item verified and saved: {}", f.filename);
+            }
+        }
+    }
+    if let Some(pb) = active_dir_pb.take() {
+        pb.finish_and_clear();
+        if let Some(dir_name) = pending_dir_success.take() {
+            if let Some(pm) = &prog {
+                pm.println(format!(
+                    "Portal: Directory '{}' received successfully!",
+                    dir_name
+                ));
+            } else {
+                println!("Portal: Directory '{}' received successfully!", dir_name);
             }
         }
     }
