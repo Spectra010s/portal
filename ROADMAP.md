@@ -56,3 +56,23 @@ Here is the strategic breakdown of the 6 issues and which will be done first:
     Why: A proper TUI is needed to keep the "Sending/Receiving item X of Y" header fixed while file bars and logs scroll beneath it.
 
 - Goal: Implement a `ratatui`-style interface that pins the header and avoids line redraw artifacts. []
+
+11. Receiver Peer Username
+    Why: Currently, the receiver never captures the sender's username (`peer_username` is always `None` in receiver history).
+
+- Goal: Have the sender transmit its username during the handshake so the receiver can record who sent the transfer. []
+
+12. Intended Bytes on Receive
+    Why: The receiver gets item counts from the `GlobalTransferManifest` but not total byte sizes, so `intended_bytes` is always `0` in receive history.
+
+- Goal: Add total byte count to the `GlobalTransferManifest` so the receiver can populate `intended_bytes` accurately. []
+
+13. History Clear & Delete
+    Why: Users need a way to manage their history — wipe it all or remove a specific record.
+
+- Goal: Add `portal history clear` (removes all records) and `portal history delete <id>` (removes a single record). []
+
+14. History Export
+    Why: Users may want to save or share their transfer history as a standalone file.
+
+- Goal: Add `portal history export` to write the full history to a user-specified file (JSON or CSV). []

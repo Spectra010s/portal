@@ -26,6 +26,7 @@ mod discovery {
 }
 mod logger;
 mod progress;
+mod history;
 
 // 1. Defining the Map (The Struct)
 #[derive(Parser)]
