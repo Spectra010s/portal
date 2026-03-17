@@ -6,6 +6,7 @@ use {
     crate::{
         config::models::PortalConfig,
         discovery::beacon::start_beacon,
+        history::{append_record, HistoryMode, HistoryStatus, TransferHistoryRecord},
         metadata::GlobalTransferManifest,
         progress::{ProgressManager, Side},
     },
@@ -15,7 +16,8 @@ use {
     get_dir::get_target_dir,
     local_ip::get_local_ip,
     receive_item::receive_item,
-    std::path::PathBuf,
+    std::{path::PathBuf,
+    time::Instant, },
     tokio::{
         io::{AsyncReadExt, AsyncWriteExt, BufReader},
         net::TcpListener,
@@ -27,6 +29,12 @@ use {
 
 pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()> {
     info!("Portal: Initializing receiver systems...");
+    let mut peer_addr: Option<String> = None;
+    let mut start_ts_unix = 0u64;
+    let mut start_instant = Instant::now();
+    let mut expected_items: Option<u32> = None;
+
+    let result: Result<()> = async {
 
     let my_ip = get_local_ip()
         .await
@@ -96,6 +104,7 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     };
 
     info!("Connection accepted from sender: {}", addr);
+    peer_addr = Some(addr.ip().to_string());
     println!("Portal: Connection established with {}!", addr);
     println!("Portal: Connected to sender");
     println!("Portal: Waiting for incoming files...");
@@ -116,6 +125,9 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
         .context("Failed to send verification ID")?;
     trace!("Verification identity sent to peer.");
 
+    // Start transfer timing when we begin receiving the manifest
+    start_ts_unix = TransferHistoryRecord::now_unix();
+    start_instant = Instant::now();
     //  Read the metadata length
     let mut global_manifest_len_buf = [0u8; 4];
     socket
@@ -149,14 +161,15 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
 
     let total_directories = &global_manifest.total_directories;
     let total_files = global_manifest.total_files;
-    let description = &global_manifest.description;
+    let description = global_manifest.description.clone();
 
     let total_items = total_files + total_directories;
+    expected_items = Some(total_items);
 
     // Print basic info for the user
     println!("Portal: Incoming transfer - {} item(s)", total_items);
 
-    if let Some(desc) = description {
+    if let Some(desc) = &description {
         println!("Portal: Sender left a note: \"{}\"", desc);
         info!("Transfer Note: {}", desc);
     } else {
@@ -179,8 +192,8 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     prog.set_total_items(total_items as usize);
     trace!("Progress UI initialized with total_items={}", total_items);
 
-    // receive the item: file or directory
-    receive_item(&mut archive, &target_dir, total_items, Some(prog.clone())).await?;
+    let summary =
+        receive_item(&mut archive, &target_dir, total_items, Some(prog.clone())).await?;
     trace!("receive_item recursive loop completed.");
 
     debug!("Extraction complete. Recovering stream...");
@@ -202,5 +215,63 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
         target_dir.display()
     ));
 
+    let duration_ms = start_instant.elapsed().as_millis() as u64;
+    debug!("Preparing successful receive history record (duration: {}ms)", duration_ms);
+    let record = TransferHistoryRecord {
+        timestamp: start_ts_unix,
+        duration_ms,
+        mode: HistoryMode::Receive,
+        peer_addr: peer_addr.clone(),
+        peer_username: None,
+        receiver_path: Some(target_dir.display().to_string()),
+        description: description.clone(),
+        status: HistoryStatus::Success,
+        error: None,
+        intended_count: expected_items.unwrap_or(summary.items.len() as u32),
+        intended_bytes: 0,
+        intended_items: None,
+        actual_count: summary.items.len() as u32,
+        actual_bytes: summary.total_bytes,
+        actual_items: Some(summary.items),
+    };
+    if let Err(e) = append_record(&record).await {
+        error!("Failed to append history record: {:#}", e);
+    } else {
+        info!("Successfully appended receive history record.");
+        trace!("Appended success record: {:?}", record);
+    }
+
     Ok(())
+    }
+    .await;
+
+    if let Err(ref e) = result {
+        let duration_ms = start_instant.elapsed().as_millis() as u64;
+        debug!("Preparing failed receive history record (duration: {}ms)", duration_ms);
+        let record = TransferHistoryRecord {
+            timestamp: start_ts_unix,
+            duration_ms,
+            mode: HistoryMode::Receive,
+            peer_addr,
+            peer_username: None,
+            receiver_path: None,
+            description: None,
+            status: HistoryStatus::Failed,
+            error: Some(format!("{:#}", e)),
+            intended_count: expected_items.unwrap_or(0),
+            intended_bytes: 0,
+            intended_items: None,
+            actual_count: 0,
+            actual_bytes: 0,
+            actual_items: None,
+        };
+        if let Err(err) = append_record(&record).await {
+            error!("Failed to append failed history record: {:#}", err);
+        } else {
+            info!("Successfully appended failed receive history record.");
+            trace!("Appended failed record details: {:?}", record);
+        }
+    }
+
+    result
 }

@@ -45,7 +45,7 @@ Here is the strategic breakdown of the 6 issues and which will be done first:
 8. Transfer History (Persistent)
    Why: Keep a user-visible history of sends/receives (items, sizes, timestamps) beyond runtime logs.
 
-- Goal: Record transfer summaries to a queryable history file or store. []
+- Goal: Record transfer summaries to a queryable history file or store. [X]
 
 9. Polling and Retry Logic [(Issue 26)](https://github.com/Spectra010s/portal/issues/26)
    Why: This is the most complex "Quality of Life" feature. It handles dirty networks.
@@ -57,7 +57,28 @@ Here is the strategic breakdown of the 6 issues and which will be done first:
 
 - Goal: Implement a `ratatui`-style interface that pins the header and avoids line redraw artifacts. []
 
-11. No-Compression Mode (New)
+11. Receiver Peer Username
+    Why: Currently, the receiver never captures the sender's username (`peer_username` is always `None` in receiver history).
+
+- Goal: Have the sender transmit its username during the handshake so the receiver can record who sent the transfer. []
+
+12. Intended Bytes on Receive
+    Why: The receiver gets item counts from the `GlobalTransferManifest` but not total byte sizes, so `intended_bytes` is always `0` in receive history.
+
+- Goal: Add total byte count to the `GlobalTransferManifest` so the receiver can populate `intended_bytes` accurately. []
+
+13. History Clear & Delete
+    Why: Users need a way to manage their history — wipe it all or remove a specific record.
+
+- Goal: Add `portal history clear` (removes all records) and `portal history delete <id>` (removes a single record). []
+
+14. History Export
+    Why: Users may want to save or share their transfer history as a standalone file.
+
+- Goal: Add `portal history export` to write the full history to a user-specified file (JSON or CSV). []
+
+15. No-Compression Mode (New)
     Why: Gzip can throttle throughput for large transfers; a switch to disable compression helps performance troubleshooting and fast LAN sends.
 
 - Goal: Add a `--no-compress` flag to bypass gzip for sender/receiver. []
+

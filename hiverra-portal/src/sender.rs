@@ -3,6 +3,10 @@ mod send_item;
 use {
     crate::{
         discovery::listener::find_receiver,
+        history::{
+            append_record, HistoryItem, HistoryItemKind, HistoryMode, HistoryStatus,
+            TransferHistoryRecord,
+        },
         metadata::{DirectoryMetadata, FileMetadata, GlobalTransferManifest, TransferItem},
         progress::ProgressManager,
         select::select_files_to_send,
@@ -13,8 +17,9 @@ use {
     bincode::serialize,
     inquire::{Confirm, Text},
     send_item::send_item,
-    std::path::PathBuf,
-    std::time::Duration,
+    std::{path::PathBuf,
+    time::{Duration,
+    Instant}},
     tokio::{
         fs::metadata,
         io::{AsyncReadExt, AsyncWriteExt},
@@ -96,17 +101,27 @@ pub async fn start_send(
     to: &Option<String>,
     recursive: &bool,
 ) -> Result<()> {
-    let files = match file {
-        Some(path) => path.clone(),
-        None => {
-            if let Ok(Some(selected)) = select_files_to_send().await {
-                selected.clone()
-            } else {
-                info!("Transfer aborted: No files selected.");
-                return Ok(());
+    let mut peer_addr: Option<String> = None;
+    let mut peer_username: Option<String> = None;
+    let mut start_ts_unix = 0u64;
+    let mut start_instant = Instant::now();
+    let mut intended_items: Vec<HistoryItem> = Vec::new();
+    let mut intended_bytes: u64 = 0;
+    let mut sent_items: Vec<HistoryItem> = Vec::new();
+    let mut actual_bytes: u64 = 0;
+
+    let result: Result<()> = async {
+        let files = match file {
+            Some(path) => path.clone(),
+            None => {
+                if let Ok(Some(selected)) = select_files_to_send().await {
+                    selected.clone()
+                } else {
+                    info!("Transfer aborted: No files selected.");
+                    return Ok(());
+                }
             }
-        }
-    };
+        };
 
     trace!(
         "Validating existence and type of {} input items",
@@ -148,6 +163,7 @@ pub async fn start_send(
 
         println!("Portal: Searching for receiver...: {}", target_username);
         info!("Discovery started for user: {}", target_username);
+        peer_username = Some(target_username.clone());
 
         let discovery_result = timeout(
             Duration::from_secs(30),
@@ -160,7 +176,8 @@ pub async fn start_send(
     };
 
     let r_addr = format!("{}:{}", target_ip, target_port);
-    println!("Portal: Connecting to {}...", r_addr);
+    peer_addr = Some(target_ip.clone());
+        println!("Portal: Connecting to {}...", r_addr);
 
     let mut stream = TcpStream::connect(&r_addr)
         .await
@@ -242,6 +259,9 @@ pub async fn start_send(
         });
     //  Create global manifest
     let global_manifest = create_global_transfer_manifest(file_items, dir_items, user_desc).await?;
+    // Start transfer timing when we begin sending the manifest
+    start_ts_unix = TransferHistoryRecord::now_unix();
+    start_instant = Instant::now();
     // Serialize and send global manifest
     debug!("Sending serialized global manifest...");
     let encoded_global = serialize(&global_manifest)?;
@@ -262,14 +282,44 @@ pub async fn start_send(
         info!("Final manifest description: \"{}\"", d);
     }
 
-    let total_items = items_to_send.len();
-    println!("Portal: Preparing to send {} items(s)...", total_items);
+        let total_items = items_to_send.len();
+        println!("Portal: Preparing to send {} items(s)...", total_items);
 
     // progress manager
-    let prog = ProgressManager::new();
-    debug!("Progress UI created for sender");
-    prog.set_total_items(total_items);
-    trace!("Progress UI initialized with total_items={}", total_items);
+        let prog = ProgressManager::new();
+        debug!("Progress UI created for sender");
+        prog.set_total_items(total_items);
+        trace!("Progress UI initialized with total_items={}", total_items);
+
+        intended_items = Vec::with_capacity(items_to_send.len());
+        intended_bytes = 0;
+        sent_items = Vec::with_capacity(items_to_send.len());
+        actual_bytes = 0;
+        for (_, item) in &items_to_send {
+            match item {
+                TransferItem::File(fm) => {
+                    intended_items.push(HistoryItem {
+                        name: fm.filename.clone(),
+                        bytes: fm.file_size,
+                        kind: HistoryItemKind::File,
+                    });
+                    intended_bytes = intended_bytes.saturating_add(fm.file_size);
+                }
+                TransferItem::Directory(dm) => {
+                    intended_items.push(HistoryItem {
+                        name: dm.dirname.clone(),
+                        bytes: dm.total_size,
+                        kind: HistoryItemKind::Directory,
+                    });
+                    intended_bytes = intended_bytes.saturating_add(dm.total_size);
+                }
+            }
+        }
+        debug!(
+            "History tracker initialized: {} intended items, {} intended bytes",
+            intended_items.len(),
+            intended_bytes
+        );
 
     debug!("Initializing Gzip encoder and Tar builder...");
     let compressor = GzipEncoder::new(stream);
@@ -304,7 +354,14 @@ pub async fn start_send(
                     "Portal: File '{}' sent successfully!",
                     filename
                 ));
+                sent_items.push(HistoryItem {
+                    name: filename.clone(),
+                    bytes: file_size,
+                    kind: HistoryItemKind::File,
+                });
+                actual_bytes = actual_bytes.saturating_add(file_size);
                 trace!("Progress UI: completed file item '{}'", filename);
+                trace!("History tracker: recorded sent file '{}'", filename);
             }
             TransferItem::Directory(dm) => {
                 trace!(
@@ -335,7 +392,14 @@ pub async fn start_send(
                     "Portal: Directory '{}' sent successfully!",
                     dirname
                 ));
+                sent_items.push(HistoryItem {
+                    name: dirname.clone(),
+                    bytes: total_size,
+                    kind: HistoryItemKind::Directory,
+                });
+                actual_bytes = actual_bytes.saturating_add(total_size);
                 trace!("Progress UI: completed directory item '{}'", dirname);
+                trace!("History tracker: recorded sent directory '{}'", dirname);
             }
         }
     }
@@ -365,7 +429,73 @@ pub async fn start_send(
         total_items, r_addr
     );
 
-    prog.println("Portal: All file(s) have been sent successfully!");
+        prog.println("Portal: All file(s) have been sent successfully!");
 
-    Ok(())
+    let duration_ms = start_instant.elapsed().as_millis() as u64;
+    debug!("Preparing successful transfer history record (duration: {}ms)", duration_ms);
+    let record = TransferHistoryRecord {
+        timestamp: start_ts_unix,
+        duration_ms,
+        mode: HistoryMode::Send,
+        peer_addr: peer_addr.clone(),
+        peer_username: peer_username.clone(),
+        receiver_path: None,
+        description: global_manifest.description.clone(),
+        status: HistoryStatus::Success,
+        error: None,
+        intended_count: total_items as u32,
+        intended_bytes,
+        intended_items: Some(intended_items.clone()),
+        actual_count: sent_items.len() as u32,
+        actual_bytes,
+        actual_items: Some(sent_items.clone()),
+    };
+        if let Err(e) = append_record(&record).await {
+            warn!("Failed to append history record: {:#}", e);
+        } else {
+            info!("Successfully appended transfer history record.");
+            trace!("Appended success record: {:?}", record);
+        }
+
+        Ok(())
+    }
+    .await;
+
+    if let Err(ref e) = result {
+        let duration_ms = start_instant.elapsed().as_millis() as u64;
+        debug!("Preparing failed transfer history record (duration: {}ms)", duration_ms);
+        let record = TransferHistoryRecord {
+            timestamp: start_ts_unix,
+            duration_ms,
+            mode: HistoryMode::Send,
+            peer_addr,
+            peer_username,
+            receiver_path: None,
+            description: None,
+            status: HistoryStatus::Failed,
+            error: Some(format!("{:#}", e)),
+            intended_count: intended_items.len() as u32,
+            intended_bytes,
+            intended_items: if intended_items.is_empty() {
+                None
+            } else {
+                Some(intended_items)
+            },
+            actual_count: sent_items.len() as u32,
+            actual_bytes,
+            actual_items: if sent_items.is_empty() {
+                None
+            } else {
+                Some(sent_items)
+            },
+        };
+        if let Err(err) = append_record(&record).await {
+            warn!("Failed to append failed history record: {:#}", err);
+        } else {
+            info!("Successfully appended failed transfer history record.");
+            trace!("Appended failed record details: {:?}", record);
+        }
+    }
+
+    result
 }
