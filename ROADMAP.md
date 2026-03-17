@@ -45,7 +45,7 @@ Here is the strategic breakdown of the 6 issues and which will be done first:
 8. Transfer History (Persistent)
    Why: Keep a user-visible history of sends/receives (items, sizes, timestamps) beyond runtime logs.
 
-- Goal: Record transfer summaries to a queryable history file or store. []
+- Goal: Record transfer summaries to a queryable history file or store. [X]
 
 9. Polling and Retry Logic [(Issue 26)](https://github.com/Spectra010s/portal/issues/26)
    Why: This is the most complex "Quality of Life" feature. It handles dirty networks.
@@ -76,3 +76,9 @@ Here is the strategic breakdown of the 6 issues and which will be done first:
     Why: Users may want to save or share their transfer history as a standalone file.
 
 - Goal: Add `portal history export` to write the full history to a user-specified file (JSON or CSV). []
+
+15. No-Compression Mode (New)
+    Why: Gzip can throttle throughput for large transfers; a switch to disable compression helps performance troubleshooting and fast LAN sends.
+
+- Goal: Add a `--no-compress` flag to bypass gzip for sender/receiver. []
+
