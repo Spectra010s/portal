@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct GlobalTransferManifest {
     pub total_files: u32,
     pub total_directories: u32,
+    pub total_bytes: u64,
     pub description: Option<String>,
 }
 
