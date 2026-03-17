@@ -3,6 +3,10 @@ use {
         config::{
             list::list_config, set::set_config, setup::handle_setup, show::show_config_value,
         },
+        history::{
+            filter_history, format_history_detail, load_history, output_history_json_detail,
+            output_history_json_list, output_history_table, parse_since_unix, HistoryMode,
+        },
         receiver::start_receiver,
         sender::start_send,
         update::update_portal,
@@ -10,7 +14,7 @@ use {
     anyhow::{Context, Result},
     clap::Subcommand,
     std::path::PathBuf,
-    tracing::{debug, info, trace},
+    tracing::{debug, info, trace, warn},
 };
 
 // 2. Defining the Choices (The Enum)
@@ -47,17 +51,22 @@ pub enum Commands {
     Update,
     /// Show transfer history
     History {
+        /// Show a specific record 
+        id: Option<usize>,
+        /// Show all items in detail view
+        #[arg(long)]
+        items_all: bool,
         /// Limit number of records shown
-        #[arg(long, default_value_t = 20)]
+        #[arg(short = 'n', long, default_value_t = 10)]
         limit: u32,
         /// Output in JSON format
         #[arg(long)]
         json: bool,
-        /// Filter by direction (send|receive)
-        #[arg(long = "type", value_name = "send|receive", value_parser = ["send", "receive"])]
-        kind: Option<String>,
+        /// Filter by mode
+        #[arg(short, long, value_name = "send|receive", value_parser = ["send", "receive"])]
+        mode: Option<String>,
         /// Filter by date (e.g., 2026-03-16)
-        #[arg(long, value_name = "YYYY-MM-DD")]
+        #[arg(short, long, value_name = "YYYY-MM-DD")]
         since: Option<String>,
     },
     /// Configuration Settings management
@@ -127,17 +136,72 @@ impl Commands {
                 trace!("update::update_portal() completed successfully");
             }
             Commands::History {
+                id,
+                items_all,
                 limit,
                 json,
-                kind,
+                mode,
                 since,
             } => {
                 info!("Command: HISTORY initiated");
                 debug!(
-                    "Params: limit={}, json={}, type={:?}, since={:?}",
-                    limit, json, kind, since
+                    "Params: id={:?}, items_all={}, limit={}, json={}, mode={:?}, since={:?}",
+                    id, items_all, limit, json, mode, since
                 );
-                println!("Portal: History command not implemented yet.");
+                trace!("Delegating to history::load_history()");
+                let mode = match mode.as_deref() {
+                    Some("send") => Some(HistoryMode::Send),
+                    Some("receive") => Some(HistoryMode::Receive),
+                    _ => None,
+                };
+                let since_unix = match since.as_deref() {
+                    Some(value) => Some(parse_since_unix(value)?),
+                    None => None,
+                };
+                let records = load_history().await?;
+                trace!("history::load_history() completed successfully");
+
+                trace!("Delegating to history::filter_history()");
+                let mut records = filter_history(records, mode, since_unix, *limit as usize);
+                trace!("history::filter_history() completed successfully");
+
+                if records.is_empty() {
+                    info!("History query returned no records.");
+                    println!("Portal: No history records found.");
+                    return Ok(());
+                }
+
+                if let Some(id) = *id {
+                    if id == 0 || id > records.len() {
+                        warn!("User provided invalid history id: {}", id);
+                        println!("Portal: Invalid history id {}", id);
+                        return Ok(());
+                    }
+                    let record = records.remove(id - 1);
+                    if *json {
+                        trace!("Delegating to history::output_history_json_detail()");
+                        output_history_json_detail(&record, id)?;
+                        trace!("history::output_history_json_detail() completed successfully");
+                        return Ok(());
+                    }
+                    trace!("Delegating to history::format_history_detail()");
+                    for line in format_history_detail(&record, id, *items_all) {
+                        println!("{}", line);
+                    }
+                    trace!("history::format_history_detail() completed successfully");
+                    return Ok(());
+                }
+
+                if *json {
+                    trace!("Delegating to history::output_history_json_list()");
+                    output_history_json_list(records)?;
+                    trace!("history::output_history_json_list() completed successfully");
+                    return Ok(());
+                }
+
+                trace!("Delegating to history::output_history_table()");
+                output_history_table(&records);
+                trace!("history::output_history_table() completed successfully");
             }
             Commands::Config { action } => match action {
                 ConfigAction::Set { key, value } => {

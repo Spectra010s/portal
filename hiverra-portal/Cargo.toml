@@ -51,6 +51,7 @@ tracing = { version = "0.1.44", features = ["log"] }
 tracing-subscriber = { version = "0.3.23", features = ["fmt", "env-filter"] }
 tracing-appender = "0.2.4"
 indicatif = { version = "0.18.4", features = ["tokio"] }
+chrono = { version = "0.4.38", default-features = false, features = ["clock", "std"] }
 
 
 # The profile that 'dist' will build with
