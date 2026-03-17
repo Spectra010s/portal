@@ -84,12 +84,14 @@ async fn create_directory_metadata(dir: &PathBuf) -> Result<DirectoryMetadata> {
 pub async fn create_global_transfer_manifest(
     files: u32,
     dirs: u32,
+    total_bytes: u64,
     desc: Option<String>,
 ) -> Result<GlobalTransferManifest> {
-    debug!("Global Manifest: {} files, {} dirs", files, dirs);
+    debug!("Global Manifest: {} files, {} dirs, {} bytes", files, dirs, total_bytes);
     Ok(GlobalTransferManifest {
         total_files: files,
         total_directories: dirs,
+        total_bytes,
         description: desc,
     })
 }
@@ -251,14 +253,14 @@ pub async fn start_send(
         items_to_send.len()
     );
 
-    let (file_items, dir_items) = items_to_send
+    let (file_items, dir_items, calculated_bytes) = items_to_send
         .iter()
-        .fold((0u32, 0u32), |(f, d), (_, item)| match item {
-            TransferItem::File(_) => (f + 1, d),
-            TransferItem::Directory(_) => (f, d + 1),
+        .fold((0u32, 0u32, 0u64), |(f, d, b), (_, item)| match item {
+            TransferItem::File(fm) => (f + 1, d, b.saturating_add(fm.file_size)),
+            TransferItem::Directory(dm) => (f, d + 1, b.saturating_add(dm.total_size)),
         });
     //  Create global manifest
-    let global_manifest = create_global_transfer_manifest(file_items, dir_items, user_desc).await?;
+    let global_manifest = create_global_transfer_manifest(file_items, dir_items, calculated_bytes, user_desc).await?;
     // Start transfer timing when we begin sending the manifest
     start_ts_unix = TransferHistoryRecord::now_unix();
     start_instant = Instant::now();

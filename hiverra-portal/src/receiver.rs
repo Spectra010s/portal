@@ -33,6 +33,7 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     let mut start_ts_unix = 0u64;
     let mut start_instant = Instant::now();
     let mut expected_items: Option<u32> = None;
+    let mut expected_bytes: u64 = 0;
 
     let result: Result<()> = async {
 
@@ -162,6 +163,7 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     let total_directories = &global_manifest.total_directories;
     let total_files = global_manifest.total_files;
     let description = global_manifest.description.clone();
+    expected_bytes = global_manifest.total_bytes;
 
     let total_items = total_files + total_directories;
     expected_items = Some(total_items);
@@ -228,7 +230,7 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
         status: HistoryStatus::Success,
         error: None,
         intended_count: expected_items.unwrap_or(summary.items.len() as u32),
-        intended_bytes: 0,
+        intended_bytes: expected_bytes,
         intended_items: None,
         actual_count: summary.items.len() as u32,
         actual_bytes: summary.total_bytes,
@@ -259,7 +261,7 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
             status: HistoryStatus::Failed,
             error: Some(format!("{:#}", e)),
             intended_count: expected_items.unwrap_or(0),
-            intended_bytes: 0,
+            intended_bytes: expected_bytes,
             intended_items: None,
             actual_count: 0,
             actual_bytes: 0,
