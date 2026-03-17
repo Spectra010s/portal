@@ -1,5 +1,6 @@
 use {
     crate::{
+        history::{HistoryItem, HistoryItemKind, ReceiveSummary},
         progress::ProgressManager,
         metadata::{PortalMeta, TransferItem},
     },
@@ -32,7 +33,7 @@ pub async fn receive_item<R>(
     target_dir: &PathBuf,
     total_items: u32,
     prog: Option<ProgressManager>,
-) -> Result<()>
+) -> Result<ReceiveSummary>
 where
     R: AsyncRead + Unpin + Send,
 {
@@ -41,6 +42,8 @@ where
     let mut items_processed: u32 = 0;
     let mut active_dir_pb: Option<ProgressBar> = None;
     let mut pending_dir_success: Option<String> = None;
+    let mut history_items: Vec<HistoryItem> = Vec::new();
+    let mut history_total_bytes: u64 = 0;
 
     let mut entries = archive.entries()?;
     while let Some(entry_result) = entries.next().await {
@@ -92,6 +95,13 @@ where
                         f.filename,
                         f.file_size
                     );
+                    history_items.push(HistoryItem {
+                        name: f.filename.clone(),
+                        bytes: f.file_size,
+                        kind: HistoryItemKind::File,
+                    });
+                    history_total_bytes = history_total_bytes.saturating_add(f.file_size);
+                    trace!("History tracker: recorded received file '{}'", f.filename);
                     info!(
                         "Incoming top-level file: {} ({} bytes)",
                         f.filename, f.file_size
@@ -103,6 +113,13 @@ where
                         d.dirname,
                         d.total_size
                     );
+                    history_items.push(HistoryItem {
+                        name: d.dirname.clone(),
+                        bytes: d.total_size,
+                        kind: HistoryItemKind::Directory,
+                    });
+                    history_total_bytes = history_total_bytes.saturating_add(d.total_size);
+                    trace!("History tracker: recorded received directory '{}'", d.dirname);
                     info!(
                         "Incoming top-level directory: {} ({} bytes)",
                         d.dirname, d.total_size
@@ -374,7 +391,10 @@ where
         ));
     }
     info!("All {} items received and verified.", items_processed);
-    Ok(())
+    Ok(ReceiveSummary {
+        items: history_items,
+        total_bytes: history_total_bytes,
+    })
 }
 
 /// helper to get path for incremental renaming
