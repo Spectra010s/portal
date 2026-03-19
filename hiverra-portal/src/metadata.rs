@@ -6,6 +6,7 @@ pub struct GlobalTransferManifest {
     pub total_directories: u32,
     pub total_bytes: u64,
     pub description: Option<String>,
+    pub sender_username: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
