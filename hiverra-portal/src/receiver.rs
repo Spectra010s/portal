@@ -19,7 +19,7 @@ use {
     std::{path::PathBuf,
     time::Instant, },
     tokio::{
-        io::{AsyncReadExt, AsyncWriteExt, BufReader},
+        io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader},
         net::TcpListener,
     },
     tokio_tar::Archive,
@@ -171,6 +171,12 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
         warn!("No sender username provided in manifest");
     }
     expected_bytes = global_manifest.total_bytes;
+    let compressed = global_manifest.compressed;
+    if compressed {
+        info!("Incoming transfer is gzip-compressed");
+    } else {
+        info!("Incoming transfer is not compressed");
+    }
 
     let total_items = total_files + total_directories;
     expected_items = Some(total_items);
@@ -190,10 +196,14 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     info!("Target directory for saving: {:?}", target_dir);
 
     // receive file or directories
-    debug!("Initializing Gzip decoder and Tar archive reader...");
-    let reader = BufReader::new(socket);
-    let decoder = GzipDecoder::new(reader);
-    let mut archive = Archive::new(decoder);
+    let reader: Box<dyn AsyncRead + Unpin + Send> = if compressed {
+        debug!("Initializing Gzip decoder and Tar archive reader...");
+        Box::new(GzipDecoder::new(BufReader::new(socket)))
+    } else {
+        debug!("Initializing Tar archive reader (no compression)...");
+        Box::new(BufReader::new(socket))
+    };
+    let mut archive = Archive::new(reader);
 
     // progress manager for receiver UI
     let prog = ProgressManager::new_with_side(Side::Receiver);
@@ -206,14 +216,8 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     trace!("receive_item recursive loop completed.");
 
     debug!("Extraction complete. Recovering stream...");
-    let decoder = archive.into_inner().map_err(|_| {
-        error!("Failed to recover decoder from archive");
-        anyhow!("Failed to recover decoder from archive")
-    })?;
-    trace!("GzipDecoder recovered from Archive wrapper.");
-
-    let _socket = decoder.into_inner();
-    trace!("TcpStream recovered from GzipDecoder.");
+    let _reader = archive.into_inner();
+    trace!("Archive reader recovered.");
 
     info!(
         "SUCCESS: Transfer completed. Saved to {}",
