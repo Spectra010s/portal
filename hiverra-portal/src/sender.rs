@@ -2,6 +2,7 @@ mod send_item;
 
 use {
     crate::{
+        config::models::PortalConfig,
         discovery::listener::find_receiver,
         history::{
             append_record, HistoryItem, HistoryItemKind, HistoryMode, HistoryStatus,
@@ -86,13 +87,18 @@ pub async fn create_global_transfer_manifest(
     dirs: u32,
     total_bytes: u64,
     desc: Option<String>,
+    sender_username: Option<String>,
 ) -> Result<GlobalTransferManifest> {
-    debug!("Global Manifest: {} files, {} dirs, {} bytes", files, dirs, total_bytes);
+    debug!(
+        "Global Manifest: {} files, {} dirs, {} bytes, sender_username={:?}",
+        files, dirs, total_bytes, sender_username
+    );
     Ok(GlobalTransferManifest {
         total_files: files,
         total_directories: dirs,
         total_bytes,
         description: desc,
+        sender_username,
     })
 }
 
@@ -259,8 +265,27 @@ pub async fn start_send(
             TransferItem::File(fm) => (f + 1, d, b.saturating_add(fm.file_size)),
             TransferItem::Directory(dm) => (f, d + 1, b.saturating_add(dm.total_size)),
         });
+    // Load sender username for manifest
+    let sender_username = PortalConfig::load_all()
+        .await
+        .context("Failed to load sender user config")?
+        .user
+        .username;
+    if sender_username.is_none() {
+        warn!("Sender username not set; manifest will omit sender_username");
+    } else {
+        info!("Sender username loaded for manifest");
+    }
+
     //  Create global manifest
-    let global_manifest = create_global_transfer_manifest(file_items, dir_items, calculated_bytes, user_desc).await?;
+    let global_manifest = create_global_transfer_manifest(
+        file_items,
+        dir_items,
+        calculated_bytes,
+        user_desc,
+        sender_username.clone(),
+    )
+    .await?;
     // Start transfer timing when we begin sending the manifest
     start_ts_unix = TransferHistoryRecord::now_unix();
     start_instant = Instant::now();
