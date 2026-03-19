@@ -1,5 +1,6 @@
 use {
     crate::config::models::PortalConfig,
+    chrono::Local,
     std::fs::create_dir_all,
     tracing::{debug, trace},
     tracing_appender::non_blocking::WorkerGuard,
@@ -16,7 +17,9 @@ pub async fn init() -> WorkerGuard {
     trace!("Checking/Creating log directory: {:?}", log_dir);
     create_dir_all(&log_dir).expect("Failed to create log directory");
 
-    let file_appender = tracing_appender::rolling::daily(&log_dir, "portal.log");
+    let ts = Local::now().format("%Y%m%d-%H%M%S-%3f");
+    let log_name = format!("portal-{}.log", ts);
+    let file_appender = tracing_appender::rolling::never(&log_dir, &log_name);
     trace!("Rolling file appender configured for {:?}", log_dir);
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
