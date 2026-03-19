@@ -4,8 +4,9 @@ use {
             list::list_config, set::set_config, setup::handle_setup, show::show_config_value,
         },
         history::{
-            filter_history, format_history_detail, load_history, output_history_json_detail,
-            output_history_json_list, output_history_table, parse_since_unix, HistoryMode,
+            clear_history, delete_history_record, filter_history, format_history_detail,
+            load_history, output_history_json_detail, output_history_json_list,
+            output_history_table, parse_since_unix, HistoryMode,
         },
         receiver::start_receiver,
         sender::start_send,
@@ -51,6 +52,9 @@ pub enum Commands {
     Update,
     /// Show transfer history
     History {
+        /// History actions (clear/delete)
+        #[command(subcommand)]
+        action: Option<HistoryAction>,
         /// Show a specific record 
         id: Option<usize>,
         /// Show all items in detail view
@@ -76,7 +80,7 @@ pub enum Commands {
     },
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 pub enum ConfigAction {
     /// Set or Update a setting
     Set {
@@ -91,6 +95,17 @@ pub enum ConfigAction {
     List,
     /// Initialize or reconfigure Portal's default settings interactively
     Setup,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum HistoryAction {
+    /// Clear all history records
+    Clear,
+    /// Delete a history record by ID (newest-first)
+    Delete {
+        /// The record ID shown in `portal history` output
+        id: usize,
+    },
 }
 
 impl Commands {
@@ -136,6 +151,7 @@ impl Commands {
                 trace!("update::update_portal() completed successfully");
             }
             Commands::History {
+                action,
                 id,
                 items_all,
                 limit,
@@ -145,9 +161,34 @@ impl Commands {
             } => {
                 info!("Command: HISTORY initiated");
                 debug!(
-                    "Params: id={:?}, items_all={}, limit={}, json={}, mode={:?}, since={:?}",
-                    id, items_all, limit, json, mode, since
+                    "Params: action={:?}, id={:?}, items_all={}, limit={}, json={}, mode={:?}, since={:?}",
+                    action, id, items_all, limit, json, mode, since
                 );
+                if let Some(action) = action {
+                    trace!("History action requested: {:?}", action);
+                    match action {
+                        HistoryAction::Clear => {
+                            info!("History action: CLEAR");
+                            trace!("Delegating to history::clear_history()");
+                            clear_history().await?;
+                            trace!("history::clear_history() completed successfully");
+                            println!("Portal: History cleared.");
+                            return Ok(());
+                        }
+                        HistoryAction::Delete { id } => {
+                            info!("History action: DELETE id={}", id);
+                            trace!("Delegating to history::delete_history_record()");
+                            if delete_history_record(*id).await? {
+                                trace!("history::delete_history_record() completed successfully");
+                                println!("Portal: History record #{} deleted.", id);
+                            } else {
+                                warn!("User provided invalid history id: {}", id);
+                                println!("Portal: Invalid history id {}", id);
+                            }
+                            return Ok(());
+                        }
+                    }
+                }
                 trace!("Delegating to history::load_history()");
                 let mode = match mode.as_deref() {
                     Some("send") => Some(HistoryMode::Send),
@@ -203,34 +244,37 @@ impl Commands {
                 output_history_table(&records);
                 trace!("history::output_history_table() completed successfully");
             }
-            Commands::Config { action } => match action {
-                ConfigAction::Set { key, value } => {
-                    info!("Config: SET key='{}'", key);
-                    trace!("Delegating to config::set::set_config");
-                    set_config(&key, &value)
-                        .await
-                        .context("Failed to set configuration")?;
+            Commands::Config { action } => {
+                debug!("Config action: {:?}", action);
+                match action {
+                    ConfigAction::Set { key, value } => {
+                        info!("Config: SET key='{}'", key);
+                        trace!("Delegating to config::set::set_config");
+                        set_config(&key, &value)
+                            .await
+                            .context("Failed to set configuration")?;
+                    }
+                    ConfigAction::Show { key } => {
+                        info!("Config: SHOW key='{}'", key);
+                        trace!("Delegating to config::show::show_config_value");
+                        // Logic to read and print the a varable value
+                        show_config_value(&key)
+                            .await
+                            .context("Failed to get variable value")?;
+                    }
+                    ConfigAction::List => {
+                        info!("Config: LIST initiated");
+                        trace!("Delegating to config::list::list_config");
+                        // Logic to list all the variables
+                        list_config().await?;
+                    }
+                    ConfigAction::Setup => {
+                        info!("Config: SETUP initiated");
+                        trace!("Delegating to config::setup::handle_setup");
+                        handle_setup().await.context("Failed to run setup")?;
+                    }
                 }
-                ConfigAction::Show { key } => {
-                    info!("Config: SHOW key='{}'", key);
-                    trace!("Delegating to config::show::show_config_value");
-                    // Logic to read and print the a varable value
-                    show_config_value(&key)
-                        .await
-                        .context("Failed to get variable value")?;
-                }
-                ConfigAction::List => {
-                    info!("Config: LIST initiated");
-                    trace!("Delegating to config::list::list_config");
-                    // Logic to list all the variables
-                    list_config().await?;
-                }
-                ConfigAction::Setup => {
-                    info!("Config: SETUP initiated");
-                    trace!("Delegating to config::setup::handle_setup");
-                    handle_setup().await.context("Failed to run setup")?;
-                }
-            },
+            }
         }
         Ok(()) // Return success if no errors occurred
     }

@@ -11,6 +11,6 @@ pub use {
     models::{
         HistoryItem, HistoryItemKind, HistoryMode, HistoryStatus, ReceiveSummary, TransferHistoryRecord,
     },
-    storage::{append_record, load_history},
+    storage::{append_record, clear_history, delete_history_record, load_history},
 };
 
