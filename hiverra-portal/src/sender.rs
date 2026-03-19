@@ -1,4 +1,7 @@
+mod manifest;
 mod send_item;
+
+pub use manifest::create_file_metadata;
 
 use {
     crate::{
@@ -8,13 +11,13 @@ use {
             append_record, HistoryItem, HistoryItemKind, HistoryMode, HistoryStatus,
             TransferHistoryRecord,
         },
-        metadata::{DirectoryMetadata, FileMetadata, GlobalTransferManifest, TransferItem},
+        metadata::TransferItem,
         progress::ProgressManager,
         select::select_files_to_send,
     },
+    manifest::{create_directory_metadata, create_global_transfer_manifest},
     anyhow::{Context, Result, anyhow},
     async_compression::tokio::write::GzipEncoder,
-    async_walkdir::WalkDir,
     bincode::serialize,
     inquire::{Confirm, Text},
     send_item::send_item,
@@ -22,87 +25,13 @@ use {
     time::{Duration,
     Instant}},
     tokio::{
-        fs::metadata,
         io::{AsyncReadExt, AsyncWrite, AsyncWriteExt},
         net::TcpStream,
         time::timeout,
     },
-    tokio_stream::StreamExt,
     tokio_tar::Builder,
     tracing::{debug, error, info, trace, warn},
 };
-
-pub async fn create_file_metadata(path: &PathBuf) -> Result<FileMetadata> {
-    let attr = metadata(path).await?;
-    debug!("Generating metadata for file: {:?}", path);
-
-    let filename = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("unknown_file")
-        .to_string();
-
-    Ok(FileMetadata {
-        filename,
-        file_size: attr.len(),
-    })
-}
-
-async fn create_directory_metadata(dir: &PathBuf) -> Result<DirectoryMetadata> {
-    debug!("Calculating total size for directory: {:?}", dir);
-    let mut total_size = 0u64;
-    let mut entries = WalkDir::new(dir);
-    // We walk the directory once to get the total size for the Global Manifest
-    while let Some(entry) = entries.next().await {
-        let entry = entry.context("Portal: Failed to read directory entry for metadata")?;
-        let entry_path = entry.path();
-        trace!("Scanning path for size calculation: {:?}", entry_path);
-
-        let file_type = entry.file_type().await?;
-
-        if file_type.is_file() {
-            if let Ok(meta) = entry.metadata().await {
-                trace!("Found file: {:?} ({} bytes)", entry_path, meta.len());
-                total_size += meta.len();
-            }
-        }
-    }
-
-    debug!(
-        "Directory size calculation complete: {} bytes total for {:?}",
-        total_size, dir
-    );
-    Ok(DirectoryMetadata {
-        dirname: dir
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("unknown_dir")
-            .to_string(),
-        total_size,
-    })
-}
-
-pub async fn create_global_transfer_manifest(
-    files: u32,
-    dirs: u32,
-    total_bytes: u64,
-    desc: Option<String>,
-    sender_username: Option<String>,
-    compressed: bool,
-) -> Result<GlobalTransferManifest> {
-    debug!(
-        "Global Manifest: {} files, {} dirs, {} bytes, sender_username={:?}, compressed={}",
-        files, dirs, total_bytes, sender_username, compressed
-    );
-    Ok(GlobalTransferManifest {
-        total_files: files,
-        total_directories: dirs,
-        total_bytes,
-        description: desc,
-        sender_username,
-        compressed,
-    })
-}
 
 async fn stream_items<W: AsyncWrite + Unpin + Send>(
     builder: &mut Builder<W>,
