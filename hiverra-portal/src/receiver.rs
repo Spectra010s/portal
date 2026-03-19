@@ -23,13 +23,14 @@ use {
         net::TcpListener,
     },
     tokio_tar::Archive,
-    tracing::{debug, error, info, trace},
+    tracing::{debug, error, info, trace, warn},
     uuid::Uuid,
 };
 
 pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()> {
     info!("Portal: Initializing receiver systems...");
     let mut peer_addr: Option<String> = None;
+    let mut peer_username: Option<String> = None;
     let mut start_ts_unix = 0u64;
     let mut start_instant = Instant::now();
     let mut expected_items: Option<u32> = None;
@@ -163,6 +164,12 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     let total_directories = &global_manifest.total_directories;
     let total_files = global_manifest.total_files;
     let description = global_manifest.description.clone();
+    peer_username = global_manifest.sender_username.clone();
+    if let Some(name) = &peer_username {
+        info!("Sender username received in manifest: {}", name);
+    } else {
+        warn!("No sender username provided in manifest");
+    }
     expected_bytes = global_manifest.total_bytes;
 
     let total_items = total_files + total_directories;
@@ -224,7 +231,7 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
         duration_ms,
         mode: HistoryMode::Receive,
         peer_addr: peer_addr.clone(),
-        peer_username: None,
+        peer_username: peer_username.clone(),
         receiver_path: Some(target_dir.display().to_string()),
         description: description.clone(),
         status: HistoryStatus::Success,
@@ -250,14 +257,14 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     if let Err(ref e) = result {
         let duration_ms = start_instant.elapsed().as_millis() as u64;
         debug!("Preparing failed receive history record (duration: {}ms)", duration_ms);
-        let record = TransferHistoryRecord {
-            timestamp: start_ts_unix,
-            duration_ms,
-            mode: HistoryMode::Receive,
-            peer_addr,
-            peer_username: None,
-            receiver_path: None,
-            description: None,
+    let record = TransferHistoryRecord {
+        timestamp: start_ts_unix,
+        duration_ms,
+        mode: HistoryMode::Receive,
+        peer_addr,
+        peer_username,
+        receiver_path: None,
+        description: None,
             status: HistoryStatus::Failed,
             error: Some(format!("{:#}", e)),
             intended_count: expected_items.unwrap_or(0),
