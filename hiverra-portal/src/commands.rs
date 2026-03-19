@@ -40,6 +40,9 @@ pub enum Commands {
         /// Send folder recursively
         #[arg(short, long, value_name = "FOLDER")]
         recursive: bool,
+        /// Disable gzip compression for tranfer
+        #[arg(long)]
+        no_compress: bool,
     },
     /// Receive a file
     Receive {
@@ -185,15 +188,16 @@ impl Commands {
                 port,
                 to,
                 recursive,
+                no_compress,
             } => {
                 info!("Command: SEND initiated");
                 debug!(
-                    "Params: file={:?}, address={:?}, port={}, to={:?}, recursive={}",
-                    file, address, port, to, recursive
+                    "Params: file={:?}, address={:?}, port={}, to={:?}, recursive={}, no_compress={}",
+                    file, address, port, to, recursive, no_compress
                 );
                 trace!("Delegating to sender::start_send()");
                 // send file or files
-                start_send(&file, &address, &port, &to, &recursive)
+                start_send(&file, &address, &port, &to, &recursive, &no_compress)
                     .await
                     .context("Failed to execute Send command")?;
                 trace!("sender::start_send() completed successfully");
