@@ -7,7 +7,10 @@ pub mod storage;
 pub use {
     filter::{filter_history, parse_since_unix},
     format::{format_history_detail, output_history_table},
-    json::{output_history_json_detail, output_history_json_list},
+    json::{
+        build_history_json_detail_list, build_history_json_list, output_history_json_detail,
+        output_history_json_list,
+    },
     models::{
         HistoryItem, HistoryItemKind, HistoryMode, HistoryStatus, ReceiveSummary, TransferHistoryRecord,
     },
