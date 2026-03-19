@@ -52,11 +52,8 @@
 
     pub fn output_history_json_list(records: Vec<TransferHistoryRecord>) -> Result<()> {
         debug!("Outputting JSON list for {} history records", records.len());
-        let mut out = Vec::with_capacity(records.len());
-        for (idx, record) in records.iter().enumerate() {
-            out.push(build_history_json_summary(record, idx + 1));
-        }
-        println!("{}", serde_json::to_string(&out)?);
+        let out = build_history_json_list(records)?;
+        println!("{out}");
         Ok(())
     }
 
@@ -65,6 +62,22 @@
         let out = build_history_json_detail(record, id);
         println!("{}", serde_json::to_string(&out)?);
         Ok(())
+    }
+
+    pub fn build_history_json_list(records: Vec<TransferHistoryRecord>) -> Result<String> {
+        let mut out = Vec::with_capacity(records.len());
+        for (idx, record) in records.iter().enumerate() {
+            out.push(build_history_json_summary(record, idx + 1));
+        }
+        Ok(serde_json::to_string(&out)?)
+    }
+
+    pub fn build_history_json_detail_list(records: Vec<TransferHistoryRecord>) -> Result<String> {
+        let mut out = Vec::with_capacity(records.len());
+        for (idx, record) in records.iter().enumerate() {
+            out.push(build_history_json_detail(record, idx + 1));
+        }
+        Ok(serde_json::to_string(&out)?)
     }
 
     fn build_history_json_summary(record: &TransferHistoryRecord, id: usize) -> HistoryJsonSummary {
