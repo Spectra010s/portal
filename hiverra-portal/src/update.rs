@@ -11,7 +11,7 @@ use {
     tar::Archive,
     tempfile::Builder,
     tokio::task::spawn_blocking,
-    tracing::{debug, error, info, trace, warn},
+    tracing::{debug, error, info, trace},
     xz2::read::XzDecoder,
 };
 
