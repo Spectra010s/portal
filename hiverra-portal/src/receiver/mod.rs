@@ -29,6 +29,7 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     let mut expected_items: Option<u32> = None;
     let mut expected_bytes: u64 = 0;
 
+    let mut partial_summary: Option<crate::history::ReceiveSummary> = None;
     let result: Result<()> = async {
 
     let handshake = accept_and_read_manifest(port).await?;
@@ -78,14 +79,18 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     prog.set_total_items(total_items as usize);
     trace!("Progress UI initialized with total_items={}", total_items);
 
-    let summary = receive_stream(
+    let (stream_result, summary) = receive_stream(
         socket,
         compressed,
         &target_dir,
         total_items,
         Some(prog.clone()),
     )
-    .await?;
+    .await;
+    if let Err(e) = stream_result {
+        partial_summary = Some(summary);
+        return Err(e);
+    }
 
     info!(
         "SUCCESS: Transfer completed. Saved to {}",
@@ -126,6 +131,10 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     if let Err(ref e) = result {
         let duration_ms = start_instant.elapsed().as_millis() as u64;
         debug!("Preparing failed receive history record (duration: {}ms)", duration_ms);
+    let summary = partial_summary.unwrap_or(crate::history::ReceiveSummary {
+        items: Vec::new(),
+        total_bytes: 0,
+    });
     let mut record = build_receive_history_record(
         start_ts_unix,
         duration_ms,
@@ -136,9 +145,13 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
         None,
         expected_items.unwrap_or(0),
         expected_bytes,
-        0,
-        0,
-        None,
+        summary.items.len() as u32,
+        summary.total_bytes,
+        if summary.items.is_empty() {
+            None
+        } else {
+            Some(summary.items)
+        },
     );
     record.error = Some(format!("{:#}", e));
         if let Err(err) = append_record(&record).await {
