@@ -110,11 +110,10 @@ jobs:
         run: |
           gh release view "$REF" --json body --jq '.body' > body.md
 
-          # Skip if already exists
-          if grep -q "Android (Termux)" body.md; then
-            echo "Android section already present."
-            exit 0
-          fi
+          # Always clean existing Android sections to ensure clean injection
+          sed -i '/### Install prebuilt binaries via shell script (Android \/ Termux)/d' body.md
+          sed -i '/hiverra-portal-android-installer\.sh/d' body.md
+          sed -i '/aarch64-linux-android\.tar\.gz/d' body.md
 
           # Create Android section
           cat > android_section.md <<EOF
@@ -136,19 +135,14 @@ jobs:
           { print }
           ' body.md > new_body.md
 
-          mv new_body.md body.md
-
-          # Remove any previous Android table row
-          sed -i '/aarch64-linux-android\.tar\.gz/d' body.md
-
           # Create Android table row
           cat > table_row.md <<EOF
           | [hiverra-portal-aarch64-linux-android.tar.gz](https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-aarch64-linux-android.tar.gz) | Android (Termux) | [checksum](https://github.com/Spectra010s/portal/releases/download/$REF/hiverra-portal-aarch64-linux-android.tar.gz.sha256) |
           EOF
 
           # Insert table row after Linux tar.xz entry
-          sed -i "/x86_64-unknown-linux-gnu\.tar\.xz/r table_row.md" body.md
+          sed -i "/x86_64-unknown-linux-gnu\.tar\.xz/r table_row.md" new_body.md
 
-          gh release edit "$REF" --notes-file body.md
+          gh release edit "$REF" --notes-file new_body.md
 
-          rm -f android_section.md table_row.md
+          rm -f android_section.md table_row.md body.md
