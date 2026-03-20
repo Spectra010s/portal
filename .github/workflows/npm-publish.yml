@@ -55,7 +55,7 @@ jobs:
           for tarball in hiverra-portal-*.tar.xz; do
             target=$(echo "$tarball" | sed 's/^hiverra-portal-//; s/\.tar\.xz$//')
             mkdir -p "$BIN_DIR/$target"
-            tar -xJf "$tarball" -C "$BIN_DIR/$target"
+            tar -xJf "$tarball" -C "$BIN_DIR/$target" --strip-components=1
           done
 
           if [ -f "hiverra-portal-aarch64-linux-android.tar.gz" ]; then
@@ -67,7 +67,7 @@ jobs:
           if [ -f "hiverra-portal-x86_64-pc-windows-msvc.zip" ]; then
             target="x86_64-pc-windows-msvc"
             mkdir -p "$BIN_DIR/$target"
-            unzip -q "hiverra-portal-x86_64-pc-windows-msvc.zip" -d "$BIN_DIR/$target"
+            unzip -q -j "hiverra-portal-x86_64-pc-windows-msvc.zip" -d "$BIN_DIR/$target"
           fi
 
           cat > "$BIN_DIR/portal.js" <<'EOF'
@@ -149,16 +149,8 @@ jobs:
 
           EOF
 
-          awk '
-          /^## Download/ {
-            system("cat npm_section.md")
-          }
-          { print }
-          ' body.md > new_body.md
-
-          mv new_body.md body.md
-          gh release edit "$TAG" --notes-file body.md
-
+          awk '/^## Download/ {system("cat npm_section.md")} {print}' body.md > new_body.md
+          gh release edit "$TAG" --notes-file new_body.md
           rm -f npm_section.md
       
       - name: Publish npm package
@@ -168,4 +160,3 @@ jobs:
           npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          
