@@ -1,8 +1,6 @@
 use {
     crate::{
-        history::ReceiveSummary,
-        progress::ProgressManager,
-        receiver::receive_item::receive_item,
+        history::ReceiveSummary, progress::ProgressManager, receiver::receive_item::receive_item,
     },
     async_compression::tokio::bufread::GzipDecoder,
     std::path::PathBuf,
@@ -35,7 +33,8 @@ pub async fn receive_stream(
     };
     let mut archive = Archive::new(reader);
 
-    if let Err(err) = receive_item(&mut archive, target_dir, total_items, prog, &mut summary).await {
+    if let Err(err) = receive_item(&mut archive, target_dir, total_items, prog, &mut summary).await
+    {
         return (Err(err), summary);
     }
     trace!("receive_item recursive loop completed.");

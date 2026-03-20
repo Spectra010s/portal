@@ -79,10 +79,7 @@ pub fn format_status(status: HistoryStatus) -> String {
 }
 
 pub fn format_peer(record: &TransferHistoryRecord) -> String {
-    match (
-        record.peer_username.as_deref(),
-        record.peer_addr.as_deref(),
-    ) {
+    match (record.peer_username.as_deref(), record.peer_addr.as_deref()) {
         (Some(user), Some(addr)) => format!("{} ({})", user, addr),
         (Some(user), None) => user.to_string(),
         (None, Some(addr)) => addr.to_string(),
@@ -212,7 +209,10 @@ pub fn format_history_detail(
     id: usize,
     items_all: bool,
 ) -> Vec<String> {
-    debug!("Formatting detail view for record #{} (items_all={})", id, items_all);
+    debug!(
+        "Formatting detail view for record #{} (items_all={})",
+        id, items_all
+    );
     let mut lines = Vec::new();
     lines.push(format!("Portal History • Record #{}\n", id));
     let date = format_date(record.timestamp);
@@ -267,7 +267,11 @@ pub fn format_history_detail(
             "Items Received:"
         };
         lines.push(label.to_string());
-        let shown = if items_all { items.len() } else { items.len().min(cap) };
+        let shown = if items_all {
+            items.len()
+        } else {
+            items.len().min(cap)
+        };
         for item in items.iter().take(shown) {
             lines.push(format!(
                 "- {} — {} ({})",
@@ -287,7 +291,11 @@ pub fn format_history_detail(
     if let Some(items) = record.intended_items.as_ref() {
         lines.push(String::new());
         lines.push("Intended Items:".to_string());
-        let shown = if items_all { items.len() } else { items.len().min(cap) };
+        let shown = if items_all {
+            items.len()
+        } else {
+            items.len().min(cap)
+        };
         for item in items.iter().take(shown) {
             lines.push(format!(
                 "- {} — {} ({})",

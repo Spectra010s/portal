@@ -9,24 +9,22 @@ pub use manifest::create_file_metadata;
 use {
     crate::{
         config::models::PortalConfig,
-        history::{append_record, HistoryItem, HistoryItemKind, HistoryStatus, TransferHistoryRecord},
+        history::{
+            HistoryItem, HistoryItemKind, HistoryStatus, TransferHistoryRecord, append_record,
+        },
         metadata::TransferItem,
         progress::ProgressManager,
         select::select_files_to_send,
     },
-    history::build_history_record,
-    stream::send_stream,
-    handshake::connect_and_verify,
-    manifest::{create_directory_metadata, create_global_transfer_manifest},
     anyhow::{Context, Result, anyhow},
     bincode::serialize,
+    handshake::connect_and_verify,
+    history::build_history_record,
     inquire::{Confirm, Text},
-    std::{path::PathBuf,
-    time::Instant},
-    tokio::{
-        io::AsyncWriteExt,
-        net::TcpStream,
-    },
+    manifest::{create_directory_metadata, create_global_transfer_manifest},
+    std::{path::PathBuf, time::Instant},
+    stream::send_stream,
+    tokio::{io::AsyncWriteExt, net::TcpStream},
     tracing::{debug, error, info, trace, warn},
 };
 
@@ -60,122 +58,123 @@ pub async fn start_send(
             }
         };
 
-    trace!(
-        "Validating existence and type of {} input items",
-        files.len()
-    );
-    for file in &files {
-        if !file.exists() {
-            error!("Path does not exist: {:?}", file);
-            return Err(anyhow!(
-                "File or directory '{}' does not exist",
-                file.display()
-            ));
-        }
-        trace!("Verified path exists: {:?}", file);
-        if file.is_dir() {
-            if !recursive {
-                warn!("Directory encountered without recursive flag: {:?}", file);
+        trace!(
+            "Validating existence and type of {} input items",
+            files.len()
+        );
+        for file in &files {
+            if !file.exists() {
+                error!("Path does not exist: {:?}", file);
                 return Err(anyhow!(
-                    "-r not specified; omitting directory '{}'",
-                    file.display(),
+                    "File or directory '{}' does not exist",
+                    file.display()
                 ));
             }
-            trace!("Path is a directory, recursive flag is set.");
+            trace!("Verified path exists: {:?}", file);
+            if file.is_dir() {
+                if !recursive {
+                    warn!("Directory encountered without recursive flag: {:?}", file);
+                    return Err(anyhow!(
+                        "-r not specified; omitting directory '{}'",
+                        file.display(),
+                    ));
+                }
+                trace!("Path is a directory, recursive flag is set.");
+            }
         }
-    }
-    let (stream, connected_r_addr, connected_addr, connected_username) =
-        connect_and_verify(addr, port, to).await?;
-    let mut stream: TcpStream = stream;
-    peer_addr = connected_addr;
-    peer_username = connected_username;
-    //  Ask  user if to add a description
-    let user_desc = if Confirm::new("Portal: Add description for this transfer?")
-        .with_default(false)
-        .prompt()?
-    {
-        let desc = Text::new("Portal: Enter transfer description:").prompt()?;
-        info!("User added description: \"{}\"", desc);
-        Some(desc)
-    } else {
-        info!("No description added to transfer.");
-        None
-    };
-    //  Collect all files and directories
-    info!("Building item list for transfer...");
-    let mut items_to_send: Vec<(PathBuf, TransferItem)> = Vec::new();
-
-    for path in &files {
-        trace!("Preparing item: {:?}", path);
-        if path.is_dir() {
-            let dir_meta = create_directory_metadata(path).await?;
-            items_to_send.push((path.clone(), TransferItem::Directory(dir_meta)));
+        let (stream, connected_r_addr, connected_addr, connected_username) =
+            connect_and_verify(addr, port, to).await?;
+        let mut stream: TcpStream = stream;
+        peer_addr = connected_addr;
+        peer_username = connected_username;
+        //  Ask  user if to add a description
+        let user_desc = if Confirm::new("Portal: Add description for this transfer?")
+            .with_default(false)
+            .prompt()?
+        {
+            let desc = Text::new("Portal: Enter transfer description:").prompt()?;
+            info!("User added description: \"{}\"", desc);
+            Some(desc)
         } else {
-            let file_meta = create_file_metadata(path).await?;
-            items_to_send.push((path.clone(), TransferItem::File(file_meta)));
+            info!("No description added to transfer.");
+            None
+        };
+        //  Collect all files and directories
+        info!("Building item list for transfer...");
+        let mut items_to_send: Vec<(PathBuf, TransferItem)> = Vec::new();
+
+        for path in &files {
+            trace!("Preparing item: {:?}", path);
+            if path.is_dir() {
+                let dir_meta = create_directory_metadata(path).await?;
+                items_to_send.push((path.clone(), TransferItem::Directory(dir_meta)));
+            } else {
+                let file_meta = create_file_metadata(path).await?;
+                items_to_send.push((path.clone(), TransferItem::File(file_meta)));
+            }
         }
-    }
-    debug!(
-        "Successfully collected {} top-level items for manifest",
-        items_to_send.len()
-    );
+        debug!(
+            "Successfully collected {} top-level items for manifest",
+            items_to_send.len()
+        );
 
-    let (file_items, dir_items, calculated_bytes) = items_to_send
-        .iter()
-        .fold((0u32, 0u32, 0u64), |(f, d, b), (_, item)| match item {
-            TransferItem::File(fm) => (f + 1, d, b.saturating_add(fm.file_size)),
-            TransferItem::Directory(dm) => (f, d + 1, b.saturating_add(dm.total_size)),
-        });
-    // Load sender username for manifest
-    let sender_username = PortalConfig::load_all()
-        .await
-        .context("Failed to load sender user config")?
-        .user
-        .username;
-    if sender_username.is_none() {
-        warn!("Sender username not set; manifest will omit sender_username");
-    } else {
-        info!("Sender username loaded for manifest");
-    }
+        let (file_items, dir_items, calculated_bytes) =
+            items_to_send
+                .iter()
+                .fold((0u32, 0u32, 0u64), |(f, d, b), (_, item)| match item {
+                    TransferItem::File(fm) => (f + 1, d, b.saturating_add(fm.file_size)),
+                    TransferItem::Directory(dm) => (f, d + 1, b.saturating_add(dm.total_size)),
+                });
+        // Load sender username for manifest
+        let sender_username = PortalConfig::load_all()
+            .await
+            .context("Failed to load sender user config")?
+            .user
+            .username;
+        if sender_username.is_none() {
+            warn!("Sender username not set; manifest will omit sender_username");
+        } else {
+            info!("Sender username loaded for manifest");
+        }
 
-    //  Create global manifest
-    let compressed = !*no_compress;
-    let global_manifest = create_global_transfer_manifest(
-        file_items,
-        dir_items,
-        calculated_bytes,
-        user_desc,
-        sender_username.clone(),
-        compressed,
-    )
-    .await?;
-    // Start transfer timing when we begin sending the manifest
-    start_ts_unix = TransferHistoryRecord::now_unix();
-    start_instant = Instant::now();
-    // Serialize and send global manifest
-    debug!("Sending serialized global manifest...");
-    let encoded_global = serialize(&global_manifest)?;
-    let manifest_len = encoded_global.len() as u32;
-    trace!("Serialized manifest size: {} bytes", manifest_len);
+        //  Create global manifest
+        let compressed = !*no_compress;
+        let global_manifest = create_global_transfer_manifest(
+            file_items,
+            dir_items,
+            calculated_bytes,
+            user_desc,
+            sender_username.clone(),
+            compressed,
+        )
+        .await?;
+        // Start transfer timing when we begin sending the manifest
+        start_ts_unix = TransferHistoryRecord::now_unix();
+        start_instant = Instant::now();
+        // Serialize and send global manifest
+        debug!("Sending serialized global manifest...");
+        let encoded_global = serialize(&global_manifest)?;
+        let manifest_len = encoded_global.len() as u32;
+        trace!("Serialized manifest size: {} bytes", manifest_len);
 
-    stream.write_all(&manifest_len.to_be_bytes()).await?;
-    stream.write_all(&encoded_global).await?;
+        stream.write_all(&manifest_len.to_be_bytes()).await?;
+        stream.write_all(&encoded_global).await?;
 
-    info!("Global manifest delivered to receiver.");
-    println!(
-        "Portal: Transfer initialized ({} files, {} folders)",
-        file_items, dir_items
-    );
+        info!("Global manifest delivered to receiver.");
+        println!(
+            "Portal: Transfer initialized ({} files, {} folders)",
+            file_items, dir_items
+        );
 
-    if let Some(d) = &global_manifest.description {
-        println!("Portal: Note: {}", d);
-        info!("Final manifest description: \"{}\"", d);
-    }
+        if let Some(d) = &global_manifest.description {
+            println!("Portal: Note: {}", d);
+            info!("Final manifest description: \"{}\"", d);
+        }
 
         let total_items = items_to_send.len();
         println!("Portal: Preparing to send {} items(s)...", total_items);
 
-    // progress manager
+        // progress manager
         let prog = ProgressManager::new();
         debug!("Progress UI created for sender");
         prog.set_total_items(total_items);
@@ -211,38 +210,41 @@ pub async fn start_send(
             intended_bytes
         );
 
-    send_stream(
-        stream,
-        items_to_send,
-        &prog,
-        total_items,
-        &mut sent_items,
-        &mut actual_bytes,
-        *no_compress,
-    )
-    .await?;
+        send_stream(
+            stream,
+            items_to_send,
+            &prog,
+            total_items,
+            &mut sent_items,
+            &mut actual_bytes,
+            *no_compress,
+        )
+        .await?;
 
-    info!(
-        "SUCCESS: All {} items sent and stream flushed to {}",
-        total_items, connected_r_addr
-    );
+        info!(
+            "SUCCESS: All {} items sent and stream flushed to {}",
+            total_items, connected_r_addr
+        );
 
         prog.println("Portal: All file(s) have been sent successfully!");
 
-    let duration_ms = start_instant.elapsed().as_millis() as u64;
-    debug!("Preparing successful transfer history record (duration: {}ms)", duration_ms);
-    let record = build_history_record(
-        start_ts_unix,
-        duration_ms,
-        HistoryStatus::Success,
-        peer_addr.clone(),
-        peer_username.clone(),
-        global_manifest.description.clone(),
-        intended_items.clone(),
-        intended_bytes,
-        sent_items.clone(),
-        actual_bytes,
-    );
+        let duration_ms = start_instant.elapsed().as_millis() as u64;
+        debug!(
+            "Preparing successful transfer history record (duration: {}ms)",
+            duration_ms
+        );
+        let record = build_history_record(
+            start_ts_unix,
+            duration_ms,
+            HistoryStatus::Success,
+            peer_addr.clone(),
+            peer_username.clone(),
+            global_manifest.description.clone(),
+            intended_items.clone(),
+            intended_bytes,
+            sent_items.clone(),
+            actual_bytes,
+        );
         if let Err(e) = append_record(&record).await {
             warn!("Failed to append history record: {:#}", e);
         } else {
@@ -256,7 +258,10 @@ pub async fn start_send(
 
     if let Err(ref e) = result {
         let duration_ms = start_instant.elapsed().as_millis() as u64;
-        debug!("Preparing failed transfer history record (duration: {}ms)", duration_ms);
+        debug!(
+            "Preparing failed transfer history record (duration: {}ms)",
+            duration_ms
+        );
         let mut record = build_history_record(
             start_ts_unix,
             duration_ms,

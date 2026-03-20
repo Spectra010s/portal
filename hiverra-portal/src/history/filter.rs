@@ -12,10 +12,8 @@ pub fn parse_since_unix(value: &str) -> Result<u64> {
     }
     let date = NaiveDate::parse_from_str(value, "%Y-%m-%d")
         .with_context(|| format!("Invalid date format '{}', expected YYYY-MM-DD", value))?;
-    let dt: DateTime<Utc> = DateTime::<Utc>::from_naive_utc_and_offset(
-        date.and_hms_opt(0, 0, 0).unwrap(),
-        Utc,
-    );
+    let dt: DateTime<Utc> =
+        DateTime::<Utc>::from_naive_utc_and_offset(date.and_hms_opt(0, 0, 0).unwrap(), Utc);
     Ok(dt.timestamp().max(0) as u64)
 }
 
@@ -42,7 +40,11 @@ pub fn filter_history(
         return filtered;
     }
     let len = filtered.len();
-    let take_from = if limit == 0 { 0 } else { len.saturating_sub(limit) };
+    let take_from = if limit == 0 {
+        0
+    } else {
+        len.saturating_sub(limit)
+    };
     filtered = filtered.split_off(take_from);
     filtered.reverse(); // newest first
     debug!("Filtered history count: {}", filtered.len());

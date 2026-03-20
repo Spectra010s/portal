@@ -1,12 +1,9 @@
 use {
-    crate::{
-        config::models::PortalConfig,
-        history::models::TransferHistoryRecord,
-    },
+    crate::{config::models::PortalConfig, history::models::TransferHistoryRecord},
     anyhow::{Context, Result},
     std::path::PathBuf,
     tokio::{
-        fs::{create_dir_all, remove_file, OpenOptions},
+        fs::{OpenOptions, create_dir_all, remove_file},
         io::AsyncWriteExt,
     },
     tracing::{debug, trace, warn},
@@ -77,9 +74,7 @@ pub async fn clear_history() -> Result<()> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             debug!("No history file to clear at {}", path.display())
         }
-        Err(e) => {
-            return Err(e).with_context(|| format!("Failed to clear {}", path.display()))
-        }
+        Err(e) => return Err(e).with_context(|| format!("Failed to clear {}", path.display())),
     }
     Ok(())
 }

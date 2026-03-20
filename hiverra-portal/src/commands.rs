@@ -4,10 +4,10 @@ use {
             list::list_config, set::set_config, setup::handle_setup, show::show_config_value,
         },
         history::{
-            build_history_json_detail_list, build_history_json_list, clear_history,
+            HistoryMode, build_history_json_detail_list, build_history_json_list, clear_history,
             delete_history_record, filter_history, format_history_detail, load_history,
             output_history_json_detail, output_history_json_list, output_history_table,
-            parse_since_unix, HistoryMode,
+            parse_since_unix,
         },
         receiver::start_receiver,
         sender::start_send,
@@ -60,7 +60,7 @@ pub enum Commands {
         /// Action to perform on history records
         #[command(subcommand)]
         action: Option<HistoryAction>,
-        /// Show a specific record 
+        /// Show a specific record
         id: Option<usize>,
         /// Show all items in detail view
         #[arg(long)]
@@ -144,8 +144,7 @@ fn resolve_history_filters(
 ) -> Result<(Option<HistoryMode>, Option<u64>, usize)> {
     trace!(
         "Resolving history filters: parent={:?}, child={:?}",
-        parent,
-        child
+        parent, child
     );
     let mode_raw = child
         .and_then(|c| c.mode.clone())
@@ -153,10 +152,7 @@ fn resolve_history_filters(
     let since_raw = child
         .and_then(|c| c.since.clone())
         .or_else(|| parent.since.clone());
-    let limit_raw = child
-        .and_then(|c| c.limit)
-        .or(parent.limit)
-        .unwrap_or(10);
+    let limit_raw = child.and_then(|c| c.limit).or(parent.limit).unwrap_or(10);
 
     let mode = match mode_raw.as_deref() {
         Some("send") => Some(HistoryMode::Send),
@@ -169,9 +165,7 @@ fn resolve_history_filters(
     };
     trace!(
         "Resolved history filters: mode={:?}, since={:?}, limit={}",
-        mode,
-        since,
-        limit_raw
+        mode, since, limit_raw
     );
 
     Ok((mode, since, limit_raw as usize))
@@ -232,8 +226,7 @@ impl Commands {
                     "Params: action={:?}, id={:?}, items_all={}, json={}, filter={:?}",
                     action, id, items_all, json, filter
                 );
-                let (filter_mode, since_unix, list_limit) =
-                    resolve_history_filters(filter, None)?;
+                let (filter_mode, since_unix, list_limit) = resolve_history_filters(filter, None)?;
                 if let Some(action) = action {
                     trace!("History action requested: {:?}", action);
                     match action {
@@ -271,12 +264,8 @@ impl Commands {
                                 resolve_history_filters(filter, Some(export_filter))?;
                             let export_limit = if *all { 0 } else { export_limit };
                             trace!("Delegating to history::filter_history()");
-                            let records = filter_history(
-                                records,
-                                export_mode,
-                                export_since,
-                                export_limit,
-                            );
+                            let records =
+                                filter_history(records, export_mode, export_since, export_limit);
                             let json = if *detailed {
                                 trace!("Delegating to history::build_history_json_detail_list()");
                                 build_history_json_detail_list(records)?
