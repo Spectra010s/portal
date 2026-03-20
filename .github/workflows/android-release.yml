@@ -6,7 +6,7 @@ permissions:
 on:
   push:
     tags:
-      - '**[0-9]+.[0-9]+.[0-9]+*'
+      - "**[0-9]+.[0-9]+.[0-9]+*"
 
 jobs:
   build-android:
@@ -16,7 +16,7 @@ jobs:
         working-directory: hiverra-portal
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -36,7 +36,7 @@ jobs:
           mkdir -p dist/bundle
           cp target/aarch64-linux-android/release/portal dist/bundle/portal
           cp README.md LICENSE* dist/bundle/ || true
-          
+
           cd dist
           TAR_NAME="hiverra-portal-aarch64-linux-android.tar.gz"
           tar -czf "$TAR_NAME" -C bundle .
