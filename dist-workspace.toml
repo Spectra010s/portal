@@ -17,7 +17,9 @@ display-name = "Hiverra Portal"
 install-path = "CARGO_HOME"
 # Publish jobs to run in CI
 publish-jobs = ["npm"]
+# A namespace to use when publishing this package to the npm registry
 npm-scope = "@hiverra"
+# The npm package should have this name
 npm-package = "portal"
 # Custom message to display on successful install
 install-success-msg = "Portal installed successfully!, lets get started."
