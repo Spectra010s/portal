@@ -4,16 +4,21 @@ use {
     anyhow::{Context, Result},
     async_walkdir::WalkDir,
     bincode::serialize,
+    indicatif::ProgressBar,
     std::path::PathBuf,
     tokio::{fs::File, io::AsyncWrite},
     tokio_stream::StreamExt,
     tokio_tar::{Builder, EntryType, Header},
     tracing::{debug, info, trace, warn},
-    indicatif::ProgressBar,
 };
 
 /// Appends a file or directory to the provided tar builder
-pub async fn send_item<W>(builder: &mut Builder<W>, path: PathBuf, item: TransferItem, file_pb: Option<ProgressBar>) -> Result<()>
+pub async fn send_item<W>(
+    builder: &mut Builder<W>,
+    path: PathBuf,
+    item: TransferItem,
+    file_pb: Option<ProgressBar>,
+) -> Result<()>
 where
     W: AsyncWrite + Unpin + Send,
 {
@@ -21,8 +26,7 @@ where
         TransferItem::File(file_meta) => {
             trace!(
                 "Progress UI: streaming file payload '{}' ({} bytes)",
-                file_meta.filename,
-                file_meta.file_size
+                file_meta.filename, file_meta.file_size
             );
             // Wrap in PortalMeta::Item and send metadata
             debug!("Serializing metadata for file: {}", file_meta.filename);
@@ -56,8 +60,7 @@ where
         TransferItem::Directory(dir_meta) => {
             trace!(
                 "Progress UI: streaming directory payload '{}' ({} bytes)",
-                dir_meta.dirname,
-                dir_meta.total_size
+                dir_meta.dirname, dir_meta.total_size
             );
             // tell user they are sending empty dir if empty
             if dir_meta.total_size == 0 {

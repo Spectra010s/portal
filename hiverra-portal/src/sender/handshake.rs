@@ -3,11 +3,7 @@ use {
     anyhow::{Context, Result, anyhow},
     inquire::Text,
     std::time::Duration,
-    tokio::{
-        io::AsyncReadExt,
-        net::TcpStream,
-        time::timeout,
-    },
+    tokio::{io::AsyncReadExt, net::TcpStream, time::timeout},
     tracing::{debug, error, info, trace, warn},
 };
 

@@ -1,4 +1,4 @@
-use crate::history::{HistoryMode, HistoryStatus, HistoryItem, TransferHistoryRecord};
+use crate::history::{HistoryItem, HistoryMode, HistoryStatus, TransferHistoryRecord};
 
 pub fn build_receive_history_record(
     timestamp: u64,
