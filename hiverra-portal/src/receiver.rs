@@ -1,6 +1,7 @@
 mod get_dir;
 mod local_ip;
 mod receive_item;
+mod stream;
 
 use {
     crate::{
@@ -10,19 +11,17 @@ use {
         metadata::GlobalTransferManifest,
         progress::{ProgressManager, Side},
     },
+    stream::receive_stream,
     anyhow::{Context, Result, anyhow},
-    async_compression::tokio::bufread::GzipDecoder,
     bincode::deserialize,
     get_dir::get_target_dir,
     local_ip::get_local_ip,
-    receive_item::receive_item,
     std::{path::PathBuf,
     time::Instant, },
     tokio::{
-        io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader},
+        io::{AsyncReadExt, AsyncWriteExt},
         net::TcpListener,
     },
-    tokio_tar::Archive,
     tracing::{debug, error, info, trace, warn},
     uuid::Uuid,
 };
@@ -195,29 +194,20 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     let target_dir = get_target_dir(&dir).await?;
     info!("Target directory for saving: {:?}", target_dir);
 
-    // receive file or directories
-    let reader: Box<dyn AsyncRead + Unpin + Send> = if compressed {
-        debug!("Initializing Gzip decoder and Tar archive reader...");
-        Box::new(GzipDecoder::new(BufReader::new(socket)))
-    } else {
-        debug!("Initializing Tar archive reader (no compression)...");
-        Box::new(BufReader::new(socket))
-    };
-    let mut archive = Archive::new(reader);
-
     // progress manager for receiver UI
     let prog = ProgressManager::new_with_side(Side::Receiver);
     debug!("Progress UI created for receiver");
     prog.set_total_items(total_items as usize);
     trace!("Progress UI initialized with total_items={}", total_items);
 
-    let summary =
-        receive_item(&mut archive, &target_dir, total_items, Some(prog.clone())).await?;
-    trace!("receive_item recursive loop completed.");
-
-    debug!("Extraction complete. Recovering stream...");
-    let _reader = archive.into_inner();
-    trace!("Archive reader recovered.");
+    let summary = receive_stream(
+        socket,
+        compressed,
+        &target_dir,
+        total_items,
+        Some(prog.clone()),
+    )
+    .await?;
 
     info!(
         "SUCCESS: Transfer completed. Saved to {}",
