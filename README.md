@@ -1,55 +1,213 @@
 # Portal
 
-Hiverra Portal: A lightweight CLI tool to transfer files between devices locally or remotely.
+Portal started as a personal way to move files from phone to computer. It is now a CLI tool designed to make file transfers effortless.
 
-# Overview
+## Overview
 
-This project, "Portal" (also referred to as "Hiverra Portal" in some contexts), is a command-line tool designed for secure file transfer between devices. It operates locally and is configured for private, individual use.
+Portal (Hiverra Portal) is a local-first file transfer tool built for simple, reliable sharing across devices. Today it focuses on CLI ↔ CLI transfers. Browser flows are planned.
 
-# What this project does
+## What Portal Does (Today)
 
-Portal allows users to send files from one device to another. It can also be set up to receive files. The primary features include:
+- **CLI ↔ CLI transfers** over local networks
+- **Files and folders** (recursive sends supported)
+- **Discovery mode** with identity verification
+- **Direct IP mode** for quick sends
+- **Transfer history** with export and cleanup
+- **Optional no-compress** mode (tar only)
 
-- **File Upload/Sharing:** Users can upload single or multiple files. This generates a link for others to download.
-- **Secure Transfer:** All file transfers are conducted over HTTPS.
-- **Responsive Interface:** The web interface (if applicable) is designed to work on various devices like phones, tablets, and desktops.
-- **Status Messages:** The application provides feedback on the success or failure of operations.
+## Planned
 
-Future planned features aim to enhance usability and functionality, such as https transfers, file previews, folder organization, search capabilities, personalized links, automatic file expiration, and notifications.
+- **CLI ↔ Browser**
+- **Browser ↔ CLI**
 
-# Who it is for
+## Who It’s For
 
-Portal is intended for individuals who need a private and secure way to share files without relying on third-party services that might compress files or limit quality. It's suitable for personal use or small-scale file sharing.
+Portal is for anyone who wants a fast, local, no-fuss way to move files between devices without relying on external services. It is ideal for personal workflows and small team transfers on the same network.
 
-# How to run or use it
+## Install
 
-The primary interface for Portal is a command-line tool built in Rust.
+**Release Installers (Recommended)**
 
-Here are the common commands:
+**Shell script (Linux/macOS)**
 
-- **Sending a file:**
-    - `portal send <file_path>`: To send a specific file.
-    - If no file is specified, it prompts the user to select a file.
-    - You can also specify an `address` and `port` for the receiver: `portal send --address <IP_ADDRESS> --port <PORT> <file_path>`.
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Spectra010s/portal/releases/download/v0.9.0/hiverra-portal-installer.sh | sh
+```
 
-- **Receiving a file:**
-    - `portal receive`: This command puts the application in listening mode to receive files.
-    - You can specify a `port` to listen on: `portal receive --port <PORT>`.
+**PowerShell (Windows)**
 
-- **Updating the application:**
-    - `portal update`: This command is intended to update Portal to the latest version.
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/Spectra010s/portal/releases/download/v0.9.0/hiverra-portal-installer.ps1 | iex"
+```
 
-- **Configuration management:**
-    - `portal config setup`: This command initiates an interactive setup process to configure the application, such as setting a username and default port.
-    - `portal config set <key> <value>`: Allows setting specific configuration options (e.g., `portal config set port 8080`).
-    - `portal config show <key>`: Displays the value of a specific configuration setting.
-    - `portal config list`: Lists all current configuration settings.
+**npm (prebuilt binaries)**
 
-The project also includes build workflows (`.github/workflows/`) that suggest it can be built for different platforms (e.g., Android via Termux, Linux, macOS, Windows). The specific installation method for compiled binaries would depend on how these workflows are triggered and what artifacts they produce.
+```bash
+npm install hiverra-portal@0.9.0
+```
 
-# Notes
+**Android / Termux**
 
-- **Initial Setup:** The application requires initial configuration, likely through `portal config setup`, before it can be fully used.
-- **Receiver IP/Port:** When sending files, you need to know the IP address and port of the receiving device.
-- **HTTPS vs. Local:** Portal primarily operates over local network transfers using TCP. The implementation of HTTPS for the web interface is not fully supported.
-- **"Portal Quarantine Strategy":** This implies a multi-stage process for handling received files, including staging, extension verification, and potentially external scanning.
+```bash
+curl -LsSf https://github.com/Spectra010s/portal/releases/download/v0.9.0/hiverra-portal-android-installer.sh | sh
+```
+
+**Direct download**
+
+- Download the release asset for your OS from GitHub Releases.
+
+**Build From Source**
+
+- Install Rust
+
+```bash
+cargo build -p hiverra-portal
+```
+
+## Quick Start
+
+1. Run setup
+
+```bash
+portal config setup
+```
+
+1. On receiver
+
+```bash
+portal receive
+```
+
+1. On sender
+
+```bash
+portal send path/to/file
+```
+
+## Usage Examples
+
+**Start receiver**
+
+```bash
+portal receive
+```
+
+**Send via discovery**
+
+```bash
+portal send --to <username> path/to/file
+```
+
+**Send via direct IP**
+
+```bash
+portal send --address <ip> --port <port> path/to/file
+```
+
+**Send a folder (recursive)**
+
+```bash
+portal send -r path/to/folder
+```
+
+**No-compress**
+
+```bash
+portal send --no-compress path/to/file
+```
+
+**History (list + export)**
+
+```bash
+portal history
+portal history export --detailed --output portal_history.json
+```
+
+**Update**
+To update Portal:
+
+```bash
+portal update
+```
+
+## How to Run or Use It
+
+Portal is a command-line tool. Common commands:
+
+**Send a file**
+Use this to send a specific file. If no file is specified, Portal will prompt you to select one.
+
+```bash
+portal send <file_path>
+```
+
+**Send with discovery (recommended)**
+Sends to a user by username and verifies identity.
+
+```bash
+portal send --to <username> <file_path>
+```
+
+**Send via direct IP**
+Use this when you already know the receiver’s IP and port.
+
+```bash
+portal send --address <IP_ADDRESS> --port <PORT> <file_path>
+```
+
+**Receive**
+Puts Portal into listening mode to receive files.
+
+```bash
+portal receive
+```
+
+**Receive on a custom port**
+
+```bash
+portal receive --port <PORT>
+```
+
+**Configuration setup**
+Interactive setup to configure username and default port.
+
+```bash
+portal config setup
+```
+
+**Set a configuration value**
+
+```bash
+portal config set <key> <value>
+```
+
+**Show a configuration value**
+
+```bash
+portal config show <key>
+```
+
+**List current configuration**
+
+```bash
+portal config list
+```
+
+## Documentation
+
+- [docs/index.md](https://github.com/Spectra010s/portal/blob/main/docs/index.md)
+- [docs/install.md](https://github.com/Spectra010s/portal/blob/main/docs/install.md)
+- [docs/usage.md](https://github.com/Spectra010s/portal/blob/main/docs/usage.md)
+- [docs/cli-cli.md](https://github.com/Spectra010s/portal/blob/main/docs/cli-cli.md)
+- [docs/troubleshooting.md](https://github.com/Spectra010s/portal/blob/main/docs/troubleshooting.md)
+- [docs/faq.md](https://github.com/Spectra010s/portal/blob/main/docs/faq.md)
+
+## Author
+
+Spectra010s
+
+## License
+
+[LICENSE](https://github.com/Spectra010s/portal/blob/main/LICENSE)
+
+> Hiverra Portal: A lightweight CLI tool to transfer files between devices locally or remotely.
