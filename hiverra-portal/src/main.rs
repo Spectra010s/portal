@@ -24,9 +24,9 @@ mod discovery {
     pub mod listener;
     pub mod protocol;
 }
+mod history;
 mod logger;
 mod progress;
-mod history;
 
 // 1. Defining the Map (The Struct)
 #[derive(Parser)]

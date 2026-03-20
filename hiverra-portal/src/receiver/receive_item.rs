@@ -1,12 +1,12 @@
 use {
     crate::{
         history::{HistoryItem, HistoryItemKind, ReceiveSummary},
-        progress::ProgressManager,
         metadata::{PortalMeta, TransferItem},
+        progress::ProgressManager,
     },
-    indicatif::ProgressBar,
     anyhow::{Context, Result, anyhow},
     bincode::deserialize,
+    indicatif::ProgressBar,
     inquire::Select,
     std::path::PathBuf,
     tokio::{
@@ -90,8 +90,7 @@ where
                 TransferItem::File(f) => {
                     trace!(
                         "Progress UI: starting file item '{}' ({} bytes)",
-                        f.filename,
-                        f.file_size
+                        f.filename, f.file_size
                     );
                     summary.items.push(HistoryItem {
                         name: f.filename.clone(),
@@ -108,8 +107,7 @@ where
                 TransferItem::Directory(d) => {
                     trace!(
                         "Progress UI: starting directory item '{}' ({} bytes)",
-                        d.dirname,
-                        d.total_size
+                        d.dirname, d.total_size
                     );
                     summary.items.push(HistoryItem {
                         name: d.dirname.clone(),
@@ -117,7 +115,10 @@ where
                         kind: HistoryItemKind::Directory,
                     });
                     summary.total_bytes = summary.total_bytes.saturating_add(d.total_size);
-                    trace!("History tracker: recorded received directory '{}'", d.dirname);
+                    trace!(
+                        "History tracker: recorded received directory '{}'",
+                        d.dirname
+                    );
                     info!(
                         "Incoming top-level directory: {} ({} bytes)",
                         d.dirname, d.total_size
@@ -319,7 +320,10 @@ where
                         f.file_size
                     );
                     if let Some(pm) = &prog {
-                        pm.println(&format!("Portal: File '{}' received successfully!", f.filename));
+                        pm.println(&format!(
+                            "Portal: File '{}' received successfully!",
+                            f.filename
+                        ));
                     } else {
                         println!("Portal: File '{}' received successfully!", f.filename);
                     }

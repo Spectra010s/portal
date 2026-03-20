@@ -1,9 +1,7 @@
 use {
     crate::{
-        config::models::PortalConfig,
-        discovery::beacon::start_beacon,
-        history::TransferHistoryRecord,
-        metadata::GlobalTransferManifest,
+        config::models::PortalConfig, discovery::beacon::start_beacon,
+        history::TransferHistoryRecord, metadata::GlobalTransferManifest,
         receiver::local_ip::get_local_ip,
     },
     anyhow::{Context, Result, anyhow},
@@ -26,9 +24,7 @@ pub struct HandshakeResult {
     pub start_instant: Instant,
 }
 
-pub async fn accept_and_read_manifest(
-    port: Option<u16>,
-) -> Result<HandshakeResult> {
+pub async fn accept_and_read_manifest(port: Option<u16>) -> Result<HandshakeResult> {
     let my_ip = get_local_ip()
         .await
         .context("Failed to get IP address, pls try again")?;

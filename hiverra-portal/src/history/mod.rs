@@ -12,8 +12,8 @@ pub use {
         output_history_json_list,
     },
     models::{
-        HistoryItem, HistoryItemKind, HistoryMode, HistoryStatus, ReceiveSummary, TransferHistoryRecord,
+        HistoryItem, HistoryItemKind, HistoryMode, HistoryStatus, ReceiveSummary,
+        TransferHistoryRecord,
     },
     storage::{append_record, clear_history, delete_history_record, load_history},
 };
-
