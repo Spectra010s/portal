@@ -62,7 +62,7 @@
         Id='*'
         Name='hiverra-portal'
         UpgradeCode='03150A4A-93A4-4E03-BEF5-5D53BBF4A7C7'
-        Manufacturer='Spectra010s &lt;spectra010s@gmail.com'
+        Manufacturer='Spectra010s'
         Language='1033'
         Codepage='1252'
         Version='$(var.Version)'>
@@ -70,7 +70,7 @@
         <Package Id='*'
             Keywords='Installer'
             Description='Portal is a lightweight, cross-platform CLI tool built in Rust for sending files and folders between devices instantly.'
-            Manufacturer='Spectra010s &lt;spectra010s@gmail.com'
+            Manufacturer='Spectra010s'
             InstallerVersion='450'
             Languages='1033'
             Compressed='yes'
