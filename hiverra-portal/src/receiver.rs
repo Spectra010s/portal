@@ -1,29 +1,23 @@
 mod get_dir;
 mod local_ip;
 mod receive_item;
+mod history;
+mod handshake;
 mod stream;
 
 use {
     crate::{
-        config::models::PortalConfig,
-        discovery::beacon::start_beacon,
-        history::{append_record, HistoryMode, HistoryStatus, TransferHistoryRecord},
-        metadata::GlobalTransferManifest,
+        history::{append_record, HistoryStatus},
         progress::{ProgressManager, Side},
     },
     stream::receive_stream,
-    anyhow::{Context, Result, anyhow},
-    bincode::deserialize,
+    history::build_receive_history_record,
+    handshake::accept_and_read_manifest,
+    anyhow::Result,
     get_dir::get_target_dir,
-    local_ip::get_local_ip,
     std::{path::PathBuf,
     time::Instant, },
-    tokio::{
-        io::{AsyncReadExt, AsyncWriteExt},
-        net::TcpListener,
-    },
     tracing::{debug, error, info, trace, warn},
-    uuid::Uuid,
 };
 
 pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<()> {
@@ -37,128 +31,13 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
 
     let result: Result<()> = async {
 
-    let my_ip = get_local_ip()
-        .await
-        .context("Failed to get IP address, pls try again")?;
-    debug!("Local IP detected: {:?}", my_ip);
-
-    // Use the CLI flag directly
-    let n_port = if let Some(port) = port {
-        trace!("Port source: CLI argument");
-        debug!("Portal: Overriding config port with CLI port: {}", port);
-        port
-    } else if let Some(cfg) = PortalConfig::load_or_return().await? {
-        //  Use config if it exists and has a value
-        if let Some(p) = cfg.network.default_port {
-            trace!("Port source: User Configuration");
-            debug!("Portal: Port not given, using config port: {}", p);
-            p
-        } else {
-            error!("Port missing in both CLI and config");
-            return Err(anyhow!("No port provided and config has no port set"));
-        }
-    } else {
-        //  Neither CLI nor config
-        trace!("Port source: No configuration found, falling back to requirement check");
-        error!("No port configuration found");
-        return Err(anyhow!("No port provided and no config found"));
-    };
-
-    // Fetching username with load_all
-    let full_cfg = PortalConfig::load_all()
-        .await
-        .context("Failed to load user config")?;
-
-    let username = full_cfg.user.username.ok_or_else(|| {
-        error!("Attempted to receive without a username set");
-        anyhow!("No username found. Please run 'portal config set user.username <name>' first.")
-    })?;
-
-    // Unique session ID for this transfer
-    let node_id = Uuid::new_v4().to_string();
-    debug!("Generated session Node ID: {}", node_id);
-
-    let new_addr = format!("0.0.0.0:{}", n_port);
-    trace!("Listener target address: {}", new_addr);
-
-    let listener = TcpListener::bind(&new_addr)
-        .await
-        .context("Failed to bind to port")?;
-
-    println!("Portal: Creating wormhole at {:?}", my_ip);
-    println!("Portal: Wormhole open for {:?}", username);
-    info!("TCP Listener bound to {}", new_addr);
-
-    // The Tokio Select logic to run Beacon and Listener together
-    let (mut socket, addr) = tokio::select! {
-        // start the beacon
-        _ = start_beacon(username, node_id.clone(), n_port) => {
-            error!("Discovery beacon exited unexpectedly");
-            return Err(anyhow!("Portal: Discovery beacon stopped unexpectedly"));
-        }
-        // wait for the actual TCP connection
-        result = listener.accept() => {
-            let (conn, addr) = result.context("Failed to accept connection")?;
-            trace!("Accepted raw TCP connection from: {:?}", addr);
-            (conn, addr)
-        }
-    };
-
-    info!("Connection accepted from sender: {}", addr);
-    peer_addr = Some(addr.ip().to_string());
-    println!("Portal: Connection established with {}!", addr);
-    println!("Portal: Connected to sender");
-    println!("Portal: Waiting for incoming files...");
-
-    // Send ID to Sender so they can verify who we are
-    debug!("Sending Node ID for verification: {}", node_id);
-    let id_bytes = node_id.as_bytes();
-    let id_len = id_bytes.len() as u32;
-    trace!("Node ID length: {} bytes", id_len);
-
-    socket
-        .write_all(&id_len.to_be_bytes())
-        .await
-        .context("Failed to send verification length")?;
-    socket
-        .write_all(id_bytes)
-        .await
-        .context("Failed to send verification ID")?;
-    trace!("Verification identity sent to peer.");
-
-    // Start transfer timing when we begin receiving the manifest
-    start_ts_unix = TransferHistoryRecord::now_unix();
-    start_instant = Instant::now();
-    //  Read the metadata length
-    let mut global_manifest_len_buf = [0u8; 4];
-    socket
-        .read_exact(&mut global_manifest_len_buf)
-        .await
-        .context("Failed to read global manifest length")?;
-
-    let global_manifest_len = u32::from_be_bytes(global_manifest_len_buf) as usize;
-    debug!(
-        "Incoming global manifest length: {} bytes",
-        global_manifest_len
-    );
-
-    //  Read the Metadata Blob
-    let mut global_manifest_buf = vec![0u8; global_manifest_len];
-    socket
-        .read_exact(&mut global_manifest_buf)
-        .await
-        .context("Failed to read global manifest blob")?;
-    trace!(
-        "Read global manifest raw bytes (size: {}). Deserializing...",
-        global_manifest_len
-    );
-
-    // Deserialize the manifest
-    let global_manifest: GlobalTransferManifest =
-        deserialize(&global_manifest_buf).context("Failed to deserialize global manifest")?;
-
-    info!("Global manifest received and deserialized successfully.");
-    trace!("Manifest data: {:?}", global_manifest);
+    let handshake = accept_and_read_manifest(port).await?;
+    let mut socket = handshake.socket;
+    peer_addr = handshake.peer_addr;
+    peer_username = handshake.peer_username;
+    start_ts_unix = handshake.start_ts_unix;
+    start_instant = handshake.start_instant;
+    let global_manifest = handshake.manifest;
 
     let total_directories = &global_manifest.total_directories;
     let total_files = global_manifest.total_files;
@@ -220,23 +99,20 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
 
     let duration_ms = start_instant.elapsed().as_millis() as u64;
     debug!("Preparing successful receive history record (duration: {}ms)", duration_ms);
-    let record = TransferHistoryRecord {
-        timestamp: start_ts_unix,
+    let record = build_receive_history_record(
+        start_ts_unix,
         duration_ms,
-        mode: HistoryMode::Receive,
-        peer_addr: peer_addr.clone(),
-        peer_username: peer_username.clone(),
-        receiver_path: Some(target_dir.display().to_string()),
-        description: description.clone(),
-        status: HistoryStatus::Success,
-        error: None,
-        intended_count: expected_items.unwrap_or(summary.items.len() as u32),
-        intended_bytes: expected_bytes,
-        intended_items: None,
-        actual_count: summary.items.len() as u32,
-        actual_bytes: summary.total_bytes,
-        actual_items: Some(summary.items),
-    };
+        HistoryStatus::Success,
+        peer_addr.clone(),
+        peer_username.clone(),
+        Some(target_dir.display().to_string()),
+        description.clone(),
+        expected_items.unwrap_or(summary.items.len() as u32),
+        expected_bytes,
+        summary.items.len() as u32,
+        summary.total_bytes,
+        Some(summary.items),
+    );
     if let Err(e) = append_record(&record).await {
         error!("Failed to append history record: {:#}", e);
     } else {
@@ -251,23 +127,21 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     if let Err(ref e) = result {
         let duration_ms = start_instant.elapsed().as_millis() as u64;
         debug!("Preparing failed receive history record (duration: {}ms)", duration_ms);
-    let record = TransferHistoryRecord {
-        timestamp: start_ts_unix,
+    let mut record = build_receive_history_record(
+        start_ts_unix,
         duration_ms,
-        mode: HistoryMode::Receive,
+        HistoryStatus::Failed,
         peer_addr,
         peer_username,
-        receiver_path: None,
-        description: None,
-            status: HistoryStatus::Failed,
-            error: Some(format!("{:#}", e)),
-            intended_count: expected_items.unwrap_or(0),
-            intended_bytes: expected_bytes,
-            intended_items: None,
-            actual_count: 0,
-            actual_bytes: 0,
-            actual_items: None,
-        };
+        None,
+        None,
+        expected_items.unwrap_or(0),
+        expected_bytes,
+        0,
+        0,
+        None,
+    );
+    record.error = Some(format!("{:#}", e));
         if let Err(err) = append_record(&record).await {
             error!("Failed to append failed history record: {:#}", err);
         } else {
