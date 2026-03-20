@@ -32,9 +32,9 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     let result: Result<()> = async {
 
     let handshake = accept_and_read_manifest(port).await?;
-    let mut socket = handshake.socket;
+    let socket = handshake.socket;
     peer_addr = handshake.peer_addr;
-    peer_username = handshake.peer_username;
+    peer_username = handshake.peer_username.clone();
     start_ts_unix = handshake.start_ts_unix;
     start_instant = handshake.start_instant;
     let global_manifest = handshake.manifest;
@@ -42,7 +42,6 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
     let total_directories = &global_manifest.total_directories;
     let total_files = global_manifest.total_files;
     let description = global_manifest.description.clone();
-    peer_username = global_manifest.sender_username.clone();
     if let Some(name) = &peer_username {
         info!("Sender username received in manifest: {}", name);
     } else {
