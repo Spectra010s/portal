@@ -4,7 +4,7 @@ members = ["cargo:./hiverra-portal"]
 # Config for 'dist'
 [dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.30.3"
+cargo-dist-version = "0.31.0"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
@@ -17,6 +17,8 @@ display-name = "Hiverra Portal"
 install-path = "CARGO_HOME"
 # Publish jobs to run in CI
 publish-jobs = ["npm"]
+npm-scope = "@hiverra"
+npm-package = "portal"
 # Custom message to display on successful install
 install-success-msg = "Portal installed successfully!, lets get started."
 # Whether to install an updater program
