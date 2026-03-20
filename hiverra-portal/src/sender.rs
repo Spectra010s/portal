@@ -1,4 +1,5 @@
 mod handshake;
+mod history;
 mod manifest;
 mod send_item;
 mod stream;
@@ -8,14 +9,12 @@ pub use manifest::create_file_metadata;
 use {
     crate::{
         config::models::PortalConfig,
-        history::{
-            append_record, HistoryItem, HistoryItemKind, HistoryMode, HistoryStatus,
-            TransferHistoryRecord,
-        },
+        history::{append_record, HistoryItem, HistoryItemKind, HistoryStatus, TransferHistoryRecord},
         metadata::TransferItem,
         progress::ProgressManager,
         select::select_files_to_send,
     },
+    history::build_history_record,
     stream::send_stream,
     handshake::connect_and_verify,
     manifest::{create_directory_metadata, create_global_transfer_manifest},
@@ -232,23 +231,18 @@ pub async fn start_send(
 
     let duration_ms = start_instant.elapsed().as_millis() as u64;
     debug!("Preparing successful transfer history record (duration: {}ms)", duration_ms);
-    let record = TransferHistoryRecord {
-        timestamp: start_ts_unix,
+    let record = build_history_record(
+        start_ts_unix,
         duration_ms,
-        mode: HistoryMode::Send,
-        peer_addr: peer_addr.clone(),
-        peer_username: peer_username.clone(),
-        receiver_path: None,
-        description: global_manifest.description.clone(),
-        status: HistoryStatus::Success,
-        error: None,
-        intended_count: total_items as u32,
+        HistoryStatus::Success,
+        peer_addr.clone(),
+        peer_username.clone(),
+        global_manifest.description.clone(),
+        intended_items.clone(),
         intended_bytes,
-        intended_items: Some(intended_items.clone()),
-        actual_count: sent_items.len() as u32,
+        sent_items.clone(),
         actual_bytes,
-        actual_items: Some(sent_items.clone()),
-    };
+    );
         if let Err(e) = append_record(&record).await {
             warn!("Failed to append history record: {:#}", e);
         } else {
@@ -263,31 +257,19 @@ pub async fn start_send(
     if let Err(ref e) = result {
         let duration_ms = start_instant.elapsed().as_millis() as u64;
         debug!("Preparing failed transfer history record (duration: {}ms)", duration_ms);
-        let record = TransferHistoryRecord {
-            timestamp: start_ts_unix,
+        let mut record = build_history_record(
+            start_ts_unix,
             duration_ms,
-            mode: HistoryMode::Send,
+            HistoryStatus::Failed,
             peer_addr,
             peer_username,
-            receiver_path: None,
-            description: None,
-            status: HistoryStatus::Failed,
-            error: Some(format!("{:#}", e)),
-            intended_count: intended_items.len() as u32,
+            None,
+            intended_items,
             intended_bytes,
-            intended_items: if intended_items.is_empty() {
-                None
-            } else {
-                Some(intended_items)
-            },
-            actual_count: sent_items.len() as u32,
+            sent_items,
             actual_bytes,
-            actual_items: if sent_items.is_empty() {
-                None
-            } else {
-                Some(sent_items)
-            },
-        };
+        );
+        record.error = Some(format!("{:#}", e));
         if let Err(err) = append_record(&record).await {
             warn!("Failed to append failed history record: {:#}", err);
         } else {
