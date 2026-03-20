@@ -15,3 +15,22 @@ Portal is a local-first file transfer tool that started as a personal way to mov
 **Planned**
 - CLI ↔ Browser flow
 - Browser ↔ CLI flow
+
+**Roadmap**
+- [x] Hierarchical config
+- [x] Specify download directory
+- [x] Two-stage handshake
+- [x] Multiple file support
+- [x] Folder recursive sending
+- [x] Progress bars
+- [x] Logging system
+- [x] Transfer history
+- [x] Session-based logging
+- [x] Receiver peer username
+- [x] Intended bytes on receive
+- [x] History clear and delete
+- [x] History export
+- [x] No-compression mode
+- [ ] Polling and retry logic
+- [ ] TUI progress header
+- [ ] MSI installer images (icon/banner/dialog)
