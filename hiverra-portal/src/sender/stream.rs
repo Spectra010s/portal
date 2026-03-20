@@ -32,26 +32,17 @@ async fn stream_items<W: AsyncWrite + Unpin + Send>(
             TransferItem::File(fm) => {
                 trace!(
                     "Progress UI: starting file item '{}' ({} bytes)",
-                    fm.filename,
-                    fm.file_size
+                    fm.filename, fm.file_size
                 );
                 prog.set_current_item(index + 1, total_items);
                 let filename = fm.filename.clone();
                 let file_size = fm.file_size;
                 let pb = prog.create_file_bar(&filename, file_size);
-                send_item(
-                    builder,
-                    path,
-                    TransferItem::File(fm),
-                    Some(pb.clone()),
-                )
-                .await
-                .context("Failed to append item to tarball")?;
+                send_item(builder, path, TransferItem::File(fm), Some(pb.clone()))
+                    .await
+                    .context("Failed to append item to tarball")?;
                 pb.finish_and_clear();
-                prog.println(format!(
-                    "Portal: File '{}' sent successfully!",
-                    filename
-                ));
+                prog.println(format!("Portal: File '{}' sent successfully!", filename));
                 sent_items.push(HistoryItem {
                     name: filename.clone(),
                     bytes: file_size,
@@ -64,8 +55,7 @@ async fn stream_items<W: AsyncWrite + Unpin + Send>(
             TransferItem::Directory(dm) => {
                 trace!(
                     "Progress UI: starting directory item '{}' ({} bytes)",
-                    dm.dirname,
-                    dm.total_size
+                    dm.dirname, dm.total_size
                 );
                 prog.set_current_item(index + 1, total_items);
                 let dirname = dm.dirname.clone();
@@ -77,14 +67,9 @@ async fn stream_items<W: AsyncWrite + Unpin + Send>(
                     ));
                 }
                 let pb = prog.create_file_bar(&dirname, total_size);
-                send_item(
-                    builder,
-                    path,
-                    TransferItem::Directory(dm),
-                    Some(pb.clone()),
-                )
-                .await
-                .context("Failed to append item to tarball")?;
+                send_item(builder, path, TransferItem::Directory(dm), Some(pb.clone()))
+                    .await
+                    .context("Failed to append item to tarball")?;
                 pb.finish_and_clear();
                 prog.println(format!(
                     "Portal: Directory '{}' sent successfully!",
