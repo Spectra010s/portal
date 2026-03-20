@@ -128,41 +128,15 @@ jobs:
            
           EOF
 
-          # Inject AFTER closing npm code fence
+          # Inject before the Download section
           awk '
-          BEGIN { in_npm=0; fence_count=0 }
-
-          /^### Install via npm/ {
-              in_npm=1
-              print
-              next
+          /^## Download/ {
+            system("cat android_section.md")
           }
-
-          in_npm && /^```/ {
-              fence_count++
-              print
-              if (fence_count == 2) {
-                  system("cat android_section.md")
-                  in_npm=0
-              }
-              next
-          }
-
           { print }
           ' body.md > new_body.md
 
           mv new_body.md body.md
-
-          # Fallback: if npm section wasn't found
-          if ! grep -q "Android (Termux)" body.md; then
-            awk '
-            /^## Download/ {
-              system("cat android_section.md")
-            }
-            { print }
-            ' body.md > new_body.md
-            mv new_body.md body.md
-          fi
 
           # Remove any previous Android table row
           sed -i '/aarch64-linux-android\.tar\.gz/d' body.md

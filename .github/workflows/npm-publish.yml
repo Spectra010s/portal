@@ -1,0 +1,192 @@
+name: Publish npm (custom)
+
+permissions:
+  contents: write
+
+on:
+  workflow_run:
+    workflows: ["Android Release"]
+    types: [completed]
+
+jobs:
+  publish-npm:
+    runs-on: ubuntu-22.04
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          submodules: recursive
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20.x"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Download release assets
+        shell: bash
+        run: |
+          git fetch --tags --force
+          TAG="$(git tag --points-at '${{ github.event.workflow_run.head_sha }}' | head -n 1)"
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.event.workflow_run.head_branch }}"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "Could not determine tag for this workflow run."
+            exit 1
+          fi
+
+          # Wait for Android asset (uploaded by Android workflow)
+          for i in {1..20}; do
+            if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -q 'hiverra-portal-aarch64-linux-android.tar.gz'; then
+              break
+            fi
+            sleep 30
+          done
+
+          gh release download "$TAG" \
+            --pattern "hiverra-portal-*-apple-darwin.tar.xz" \
+            --pattern "hiverra-portal-*-unknown-linux-gnu.tar.xz" \
+            --pattern "hiverra-portal-x86_64-pc-windows-msvc.zip" \
+            --pattern "hiverra-portal-aarch64-linux-android.tar.gz"
+
+      - name: Build npm package
+        shell: bash
+        run: |
+          git fetch --tags --force
+          TAG="$(git tag --points-at '${{ github.event.workflow_run.head_sha }}' | head -n 1)"
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.event.workflow_run.head_branch }}"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "Could not determine tag for this workflow run."
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          PKG_DIR="npm_pkg"
+          BIN_DIR="$PKG_DIR/bin"
+
+          mkdir -p "$BIN_DIR"
+
+          # Extract macOS and Linux tarballs
+          for tarball in hiverra-portal-*.tar.xz; do
+            target=$(echo "$tarball" | sed 's/^hiverra-portal-//; s/\.tar\.xz$//')
+            mkdir -p "$BIN_DIR/$target"
+            tar -xJf "$tarball" -C "$BIN_DIR/$target"
+          done
+
+          # Extract Android tarball
+          if [ -f "hiverra-portal-aarch64-linux-android.tar.gz" ]; then
+            target="aarch64-linux-android"
+            mkdir -p "$BIN_DIR/$target"
+            tar -xzf "hiverra-portal-aarch64-linux-android.tar.gz" -C "$BIN_DIR/$target"
+          fi
+
+          # Extract Windows zip
+          if [ -f "hiverra-portal-x86_64-pc-windows-msvc.zip" ]; then
+            target="x86_64-pc-windows-msvc"
+            mkdir -p "$BIN_DIR/$target"
+            unzip -q "hiverra-portal-x86_64-pc-windows-msvc.zip" -d "$BIN_DIR/$target"
+          fi
+
+          cat > "$BIN_DIR/portal.js" <<'EOF'
+          #!/usr/bin/env node
+          const { spawn } = require("node:child_process");
+          const path = require("node:path");
+          const fs = require("node:fs");
+
+          const override = process.env.PORTAL_NPM_TARGET;
+          const platform = process.platform;
+          const arch = process.arch;
+
+          let target = override;
+          if (!target) {
+            if (platform === "win32" && arch === "x64") target = "x86_64-pc-windows-msvc";
+            else if (platform === "darwin" && arch === "arm64") target = "aarch64-apple-darwin";
+            else if (platform === "darwin" && arch === "x64") target = "x86_64-apple-darwin";
+            else if (platform === "android" && arch === "arm64") target = "aarch64-linux-android";
+            else if (platform === "linux" && arch === "arm64") target = "aarch64-unknown-linux-gnu";
+            else if (platform === "linux" && arch === "x64") target = "x86_64-unknown-linux-gnu";
+          }
+
+          if (!target) {
+            console.error("Unsupported platform:", platform, arch);
+            process.exit(1);
+          }
+
+          const binName = platform === "win32" ? "portal.exe" : "portal";
+          const binPath = path.join(__dirname, target, binName);
+
+          if (!fs.existsSync(binPath)) {
+            console.error("Binary not found for target:", target);
+            process.exit(1);
+          }
+
+          const child = spawn(binPath, process.argv.slice(2), { stdio: "inherit" });
+          child.on("exit", (code) => process.exit(code ?? 0));
+          EOF
+
+          chmod +x "$BIN_DIR/portal.js"
+
+          cat > "$PKG_DIR/package.json" <<EOF
+          {
+            "name": "@hiverra/portal",
+            "version": "$VERSION",
+            "description": "Hiverra Portal CLI",
+            "license": "MIT",
+            "bin": {
+              "portal": "bin/portal.js"
+            },
+            "files": [
+              "bin/**",
+              "README.md",
+              "LICENSE"
+            ]
+          }
+          EOF
+
+          cp README.md "$PKG_DIR/README.md"
+          cp LICENSE "$PKG_DIR/LICENSE"
+
+      - name: Update Release Body (npm)
+        shell: bash
+        run: |
+          REF="${{ github.event.release.tag_name }}"
+          gh release view "$REF" --json body --jq '.body' > body.md
+
+          if grep -q "Install prebuilt binaries into your npm project" body.md; then
+            echo "npm section already present."
+            exit 0
+          fi
+
+          cat > npm_section.md <<EOF
+
+          ### Install prebuilt binaries into your npm project
+
+          \`\`\`sh
+          npm install @hiverra/portal@${REF#v}
+          \`\`\`
+
+          EOF
+
+          awk '
+          /^## Download/ {
+            system("cat npm_section.md")
+          }
+          { print }
+          ' body.md > new_body.md
+
+          mv new_body.md body.md
+          gh release edit "$REF" --notes-file body.md
+
+          rm -f npm_section.md
+
+      - name: Publish npm package
+        shell: bash
+        run: |
+          npm publish --access public npm_pkg
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
