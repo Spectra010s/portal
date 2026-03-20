@@ -160,10 +160,12 @@ jobs:
           gh release edit "$TAG" --notes-file body.md
 
           rm -f npm_section.md
-
+      
       - name: Publish npm package
         shell: bash
         run: |
-          npm publish --access public npm_pkg
+          cd npm_pkg
+          npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          
