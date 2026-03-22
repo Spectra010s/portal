@@ -11,9 +11,6 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: hiverra-portal
 
     steps:
       - uses: actions/checkout@v6

@@ -31,9 +31,14 @@ jobs:
         shell: bash
         run: |
           for i in {1..20}; do
-            if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -q 'hiverra-portal-aarch64-linux-android.tar.gz'; then
+            ASSETS=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+            if echo "$ASSETS" | grep -q 'hiverra-portal-aarch64-linux-android.tar.gz' && \
+               echo "$ASSETS" | grep -q 'apple-darwin.tar.xz' && \
+               echo "$ASSETS" | grep -q 'unknown-linux-gnu.tar.xz' && \
+               echo "$ASSETS" | grep -q 'windows-msvc.zip'; then
               break
             fi
+            if [ $i -eq 20 ]; then echo "Missing compulsory assets" && exit 1; fi
             sleep 30
           done
 
@@ -56,18 +61,24 @@ jobs:
             target=$(echo "$tarball" | sed 's/^hiverra-portal-//; s/\.tar\.xz$//')
             mkdir -p "$BIN_DIR/$target"
             tar -xJf "$tarball" -C "$BIN_DIR/$target" --strip-components=1
+            chmod +x "$BIN_DIR/$target/portal"
           done
 
           if [ -f "hiverra-portal-aarch64-linux-android.tar.gz" ]; then
             target="aarch64-linux-android"
             mkdir -p "$BIN_DIR/$target"
             tar -xzf "hiverra-portal-aarch64-linux-android.tar.gz" -C "$BIN_DIR/$target"
+            chmod +x "$BIN_DIR/$target/portal"
+          else
+            echo "Compulsory Android asset missing" && exit 1
           fi
 
           if [ -f "hiverra-portal-x86_64-pc-windows-msvc.zip" ]; then
             target="x86_64-pc-windows-msvc"
             mkdir -p "$BIN_DIR/$target"
-            unzip -q -j "hiverra-portal-x86_64-pc-windows-msvc.zip" -d "$BIN_DIR/$target"
+            unzip -q -j "hiverra-portal-x86_64-pc-windows-msvc.zip" "*.exe" -d "$BIN_DIR/$target"
+          else
+            echo "Compulsory Windows asset missing" && exit 1
           fi
 
           cat > "$BIN_DIR/portal.js" <<'EOF'
