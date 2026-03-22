@@ -155,7 +155,7 @@ jobs:
           ### Install prebuilt binaries into your npm project
 
           \`\`\`sh
-          npm install @hiverra/portal@${TAG#v}
+          npm install -g @hiverra/portal@${TAG#v}
           \`\`\`
 
           EOF
