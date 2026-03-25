@@ -1,0 +1,64 @@
+---
+title: About Portal
+description: What Portal is shipping today, what is planned next, and where to start.
+asIndexPage: true
+---
+
+# Portal Documentation
+
+Portal is a local-first file transfer CLI for people who want to move files between devices without introducing a hosted relay into the workflow. The current architecture is intentionally staged: **CLI to CLI is the production path today**, and browser clients are being built against the same transfer model.
+
+## What Portal is good at right now
+
+Portal already covers the part that matters most for a transfer tool: getting files from one machine to another with as little ceremony as possible.
+
+- Use discovery mode when both devices are on the same network and you want receiver identity confirmation.
+- Use direct IP mode when you already know the target address and want the shortest path.
+- Send files or folders recursively from the terminal.
+- Keep a local history of transfers and export it when you need a record.
+
+## Read docs by task
+
+If you are installing Portal for the first time, start here:
+
+- [Install Portal](/docs/install)
+- [CLI to CLI flow](/docs/cli-cli)
+
+If you already have it installed and want command guidance:
+
+- [Usage guide](/docs/usage)
+- [Troubleshooting](/docs/troubleshooting)
+- [FAQ](/docs/faq)
+
+## How the current workflow actually feels
+
+A normal Portal session looks like this:
+
+1. The receiver runs `portal receive` and waits.
+2. The sender targets that receiver by username in discovery mode, or by address and port in direct IP mode.
+3. Portal transfers the payload directly between the two machines.
+4. Both sides can inspect the resulting record in transfer history.
+
+## Roadmap Context
+
+Browser support is the next expansion, but architecture documentation stays tied to shipped behavior. Current scope:
+
+- CLI to Browser is in active roadmap scope.
+- Browser to CLI is in active roadmap scope.
+- CLI workflow remains the stable documented path.
+
+## Current capabilities snapshot
+
+- [x] Hierarchical config
+- [x] Download directory selection
+- [x] Two-stage handshake
+- [x] Multiple file support
+- [x] Folder recursive sending
+- [x] Progress bars
+- [x] Logging system
+- [x] Transfer history
+- [x] History export
+- [x] No-compression mode
+- [ ] Polling and retry logic
+- [ ] TUI progress header
+- [ ] Browser transfer flows

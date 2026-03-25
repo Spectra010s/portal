@@ -1,0 +1,114 @@
+---
+title: CLI to CLI
+description: The current transfer flow for receiver and sender terminals.
+openGraph:
+  title: Portal CLI to CLI Flow
+  description: Step-by-step receiver and sender workflow with discovery and direct IP modes.
+twitter:
+  title: Portal CLI to CLI Flow
+  description: Step-by-step receiver and sender workflow with discovery and direct IP modes.
+---
+
+import TransferFlowDemoBlock from "@/components/docs/TransferFlowDemoBlock";
+
+# CLI to CLI
+
+This is the core workflow Portal already supports well. If someone asks what Portal can do **today**, this is the answer.
+
+<TransferFlowDemoBlock />
+
+## Step 1: prepare the receiver
+
+On the destination machine, run:
+
+```bash
+portal receive
+```
+
+At this point the receiver is listening, starts broadcasting a discovery beacon, and waits for a TCP connection.
+
+Important receiver preconditions from the code:
+
+- the receiver needs a username in config
+- the receiver needs a port, either from `--port` or from config
+- Portal generates a fresh session node ID for each receive session
+
+## Step 2: identify the receiver
+
+In discovery mode, the receiver shares their username with the sender. The username is stored in config and the code appends `@portal` automatically during setup if the suffix is missing.
+
+That means users will usually look like this:
+
+```text
+spectra@portal
+```
+
+The sender listens for UDP multicast beacons until it finds that exact username.
+
+## Step 3: send the payload
+
+On the sending machine, run:
+
+```bash
+portal send --to <username> <path>
+```
+
+This is the normal path for local-network transfers. If no path is provided, the sender can open the interactive picker instead.
+
+If the payload includes directories, `-r` is required. Otherwise the sender errors immediately rather than guessing what you meant.
+
+## Step 4: verify identity
+
+Portal's discovery flow includes receiver identity verification, and this is more concrete than a vague trust check.
+
+What actually happens:
+
+1. discovery finds a beacon containing the receiver's username, TCP port, and node ID
+2. the sender opens a TCP connection
+3. the receiver sends its claimed node ID over that connection
+4. the sender compares it to the beacon node ID
+5. the transfer aborts if they do not match
+
+That is why discovery mode is the recommended default.
+
+## Step 5: send the manifest and transfer note
+
+Before the file stream begins, the sender builds a global transfer manifest containing:
+
+- total file count
+- total directory count
+- total bytes
+- whether compression is enabled
+- sender username
+- an optional transfer description
+
+The receiver reads that manifest first, then prints a short summary before the stream starts.
+
+## Direct IP fallback
+
+If you already know the destination address and port, you can bypass discovery:
+
+```bash
+portal send --address <ip> --port <port> <path>
+```
+
+This is faster to reason about in some environments, but it is not equivalent to discovery mode.
+
+What you lose:
+
+- no discovery-driven lookup
+- no node-ID verification step
+
+## When to use each mode
+
+Use discovery mode when:
+
+- both devices are on the same network
+- you want the friendlier default flow
+- you care about identity confirmation
+
+Use direct IP mode when:
+
+- you already know the exact address and port
+- discovery is blocked or unreliable on your network
+- you are optimizing for a controlled manual setup

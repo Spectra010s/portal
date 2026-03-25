@@ -1,4 +1,4 @@
-name: Publish portal to npm 
+name: Publish portal to npm
 
 permissions:
   contents: write
@@ -163,7 +163,7 @@ jobs:
           awk '/^## Download/ {system("cat npm_section.md")} {print}' body.md > new_body.md
           gh release edit "$TAG" --notes-file new_body.md
           rm -f npm_section.md
-      
+
       - name: Publish npm package
         shell: bash
         run: |
