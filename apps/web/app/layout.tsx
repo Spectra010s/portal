@@ -3,14 +3,20 @@ import "./globals.css";
 import { ThemeProvider } from "next-themes";
 import Footer from "@/components/Footer";
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: {
     default: "Hiverra Portal",
     template: "%s | Portal",
   },
   description:
-    "Portal is a local-first CLI for transferring files between devices, with a landing page and docs for the current workflow.",
+    "Portal: A lightweight CLI tool to transfer files between devices locally or remotely.",
   manifest: "/manifest.json",
+  alternates: {
+    canonical: "/",
+  },
   icons: [
     {
       rel: "icon",
@@ -35,6 +41,30 @@ export const metadata: Metadata = {
       url: "/apple-touch-icon.png",
     },
   ],
+  openGraph: {
+    type: "website",
+    title: "Hiverra Portal",
+    description:
+      "Portal: A lightweight CLI tool to transfer files between devices locally or remotely.",
+    siteName: "Portal",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "Portal",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Hiverra Portal",
+    description:
+      "Portal: A lightweight CLI tool to transfer files between devices locally or remotely.",
+    images: ["/opengraph-image"],
+    creator: "@Spectra010s",
+    site: "@Spectra010s",
+  },
 };
 
 export const viewport: Viewport = {
@@ -53,7 +83,7 @@ export default function RootLayout({
       dir="ltr"
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">
+      <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
         </ThemeProvider>
