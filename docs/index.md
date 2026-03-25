@@ -7,16 +7,19 @@ Portal is a local-first file transfer tool that started as a personal way to mov
 - Browser ↔ CLI (planned)
 
 **Start Here**
+
 - [docs/install.md](https://github.com/Spectra010s/portal/blob/main/docs/install.md)
 - [docs/usage.md](https://github.com/Spectra010s/portal/blob/main/docs/usage.md)
 - [docs/cli-cli.md](https://github.com/Spectra010s/portal/blob/main/docs/cli-cli.md)
 - [docs/troubleshooting.md](https://github.com/Spectra010s/portal/blob/main/docs/troubleshooting.md)
 
 **Planned**
+
 - CLI ↔ Browser flow
 - Browser ↔ CLI flow
 
 **Roadmap**
+
 - [x] Hierarchical config
 - [x] Specify download directory
 - [x] Two-stage handshake

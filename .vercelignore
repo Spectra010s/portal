@@ -1,0 +1,14 @@
+# Ignore Rust source and binaries
+wix
+target
+src
+Cargo.toml
+Cargo.lock
+**/*.rs
+**/*.toml
+# Ignore any other non-web folders
+/archive 
+
+# Ignore standard junk
+node_modules/
+

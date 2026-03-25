@@ -1,0 +1,30 @@
+---
+title: FAQ
+description: Answers about browser support, HTTPS, and identity verification.
+---
+
+# FAQ
+
+## Does Portal support browser transfers?
+
+Not yet. CLI to Browser and Browser to CLI are both planned, but the currently shipped workflow is CLI to CLI.
+
+## Does Portal require a central server?
+
+Not for the CLI transfer path documented here. Discovery uses local-network multicast, and the payload itself moves directly over TCP between the two machines.
+
+## What does identity verification mean in discovery mode?
+
+The receiver advertises a node ID in its UDP beacon, then sends the same ID again after the TCP connection is opened. The sender compares both values and aborts if they do not match.
+
+## Why is there no identity verification in direct IP mode?
+
+Because direct IP skips discovery entirely. Without the discovery beacon, there is no expected node ID to compare against.
+
+## What does `portal config set` do if I never ran setup?
+
+It can still create a config file. The command loads an existing config if there is one, but it can also initialize an empty config and write just the key you set.
+
+## What does Portal store in history?
+
+More than just a success marker. History records can include mode, status, peer details, intended and actual item counts, intended and actual byte totals, transfer descriptions, receiver path, and failure errors.

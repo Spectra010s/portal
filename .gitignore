@@ -2,3 +2,5 @@
 target
 build/
 dist/
+.env*.local
+_pagefind/ 

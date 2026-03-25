@@ -60,8 +60,14 @@ curl -LsSf https://github.com/Spectra010s/portal/releases/download/v0.10.1/hiver
 
 - Install Rust
 
+### Build From Source
+
+**Requires the Rust toolchain.**
+
 ```bash
-cargo build -p hiverra-portal
+git clone https://github.com/Spectra010s/portal.git
+cd portal
+cargo build --release -p hiverra-portal
 ```
 
 ## Quick Start
@@ -72,7 +78,9 @@ cargo build -p hiverra-portal
 portal config setup
 ```
 
-1. On receiver
+2. Prepare to Recieve
+
+On the destination device
 
 ```bash
 portal receive
@@ -193,7 +201,15 @@ portal config show <key>
 portal config list
 ```
 
+## Roadmap
+
+- [ ] CLI ↔ Browser: Send files to a web-based receiver via a temporary link.
+- [ ] Browser ↔ CLI: Drag-and-drop from a browser to a listening terminal.
+- [ ] Encryption: End-to-end encrypted tunnels for remote transfers.
+
 ## Documentation
+
+Detailed guides for every workflow:
 
 - [docs/index.md](https://github.com/Spectra010s/portal/blob/main/docs/index.md)
 - [docs/install.md](https://github.com/Spectra010s/portal/blob/main/docs/install.md)
@@ -204,10 +220,10 @@ portal config list
 
 ## Author
 
-Spectra010s
+Github: [Spectra010s](https://github.com/Spectra010s)
 
 ## License
 
-[LICENSE](https://github.com/Spectra010s/portal/blob/main/LICENSE)
+This project is licensed under the MIT License. See the [LICENSE](https://github.com/Spectra010s/portal/blob/main/LICENSE) file for details.
 
 > Hiverra Portal: A lightweight CLI tool to transfer files between devices locally or remotely.
