@@ -86,4 +86,3 @@ Here is the strategic breakdown of the 6 issues and which will be done first:
     Why: The Windows MSI can look more polished with a branded icon and banners.
 
 - Goal: Add WiX image assets (product icon, banner, dialog background). []
-

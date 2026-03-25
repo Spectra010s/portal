@@ -1,0 +1,117 @@
+---
+title: installation
+description: Installers, package managers, and first-time setup.
+openGraph:
+  title: Install Portal
+  description: Install Portal using shell, PowerShell, or npm, then run first-time setup.
+twitter:
+  title: Install Portal
+  description: Install Portal using shell, PowerShell, or npm, then run first-time setup.
+---
+
+import ConfigSetupDemoBlock from "@/components/docs/ConfigSetupDemoBlock";
+
+# Install Portal
+
+There are several ways to install Portal, but they are not equal. If you just want the tool working quickly, use one of the release installers. Build from source only if you are actively developing Portal or you need full control over the binary.
+
+## Recommended install paths
+
+### Linux and macOS
+
+Use the installer script:
+
+```bash
+curl -fsSL https://portal.build.app/install.sh | sh
+```
+
+### Windows
+
+Use the PowerShell installer:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://portal.build.app/install.ps1 | iex"
+```
+
+### Android / Termux
+
+Use the Android-specific installer:
+
+```bash
+curl -fsSL https://portal.build.app/install.sh | sh
+```
+
+### npm package
+
+If you prefer package-manager installs and want prebuilt binaries:
+
+```bash
+npm install -g @hiverra/portal@0.10.1
+```
+
+## Build from source
+
+Use this when you are working on the codebase itself:
+
+```bash
+git clone https://github.com/Spectra010s/portal.git
+cd portal
+cargo build --release -p hiverra-portal
+```
+
+## Verify the install
+
+After installation, confirm the binary is available:
+
+```bash
+portal --version
+```
+
+If that works, the next command you should care about is `portal config setup`.
+
+## First-time setup actually matters
+
+Portal is usable without a giant onboarding flow, but it is not a zero-config tool. The setup command writes the defaults the rest of the CLI relies on.
+
+What the code currently asks for:
+
+- Your username
+- Your default listening port
+- Your download directory for received files
+
+What the code currently does with those answers:
+
+- It appends `@portal` to your username if you did not type it.
+- It recommends port `7878`.
+- It defaults the download location to your home `Downloads` folder.
+- It writes the result to `~/.portal/config.toml`.
+- If `config.toml` already exists, it asks before overwriting it.
+
+<ConfigSetupDemoBlock />
+
+## What setup creates
+
+A typical config file looks like this:
+
+```toml
+[user]
+username = "spectra@portal"
+
+[network]
+default_port = 7878
+
+[storage]
+download_dir = "/home/spectra/Downloads"
+```
+
+## When not to rerun setup
+
+If you only want to change one value, rerunning setup is heavier than necessary. Use the targeted config commands instead:
+
+```bash
+portal config set user.username spectra
+portal config set network.default_port 9000
+portal config set storage.download_dir /path/to/folder
+```
+
+That distinction matters because `config setup` is an onboarding flow, while `config set` is the maintenance path.

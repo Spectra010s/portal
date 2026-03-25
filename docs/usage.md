@@ -5,11 +5,13 @@ This page is a practical, step‑by‑step guide to using Portal.
 ## Quick Start
 
 Receiver:
+
 ```bash
 portal receive
 ```
 
 Sender:
+
 ```bash
 portal send --to <username> path/to/file
 ```
@@ -27,11 +29,13 @@ portal update
 Use discovery when both devices are on the same network.
 
 Receiver:
+
 ```bash
 portal receive
 ```
 
 Sender:
+
 ```bash
 portal send --to <username> path/to/file
 ```
@@ -73,36 +77,43 @@ portal receive --port 7878
 ## Transfer History
 
 List history:
+
 ```bash
 portal history
 ```
 
 Show a specific record:
+
 ```bash
 portal history 3
 ```
 
 JSON output:
+
 ```bash
 portal history --json
 ```
 
 Clear history:
+
 ```bash
 portal history clear
 ```
 
 Delete a record:
+
 ```bash
 portal history delete 3
 ```
 
 Export:
+
 ```bash
 portal history export --output portal_history.json
 ```
 
 Export detailed:
+
 ```bash
 portal history export --detailed --output portal_history.json
 ```
@@ -110,17 +121,20 @@ portal history export --detailed --output portal_history.json
 ## History Filters
 
 Filter by mode:
+
 ```bash
 portal history --mode send
 portal history --mode receive
 ```
 
 Filter by date:
+
 ```bash
 portal history --since 2026-03-16
 ```
 
 Limit results:
+
 ```bash
 portal history --limit 20
 ```
@@ -134,21 +148,25 @@ portal update
 ## Configuration
 
 Interactive setup:
+
 ```bash
 portal config setup
 ```
 
 Set a value:
+
 ```bash
 portal config set <key> <value>
 ```
 
 Show a value:
+
 ```bash
 portal config show <key>
 ```
 
 List all:
+
 ```bash
 portal config list
 ```
