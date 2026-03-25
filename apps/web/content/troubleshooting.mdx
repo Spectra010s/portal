@@ -1,0 +1,73 @@
+---
+title: Troubleshooting
+description: Network, port, partial transfer, and logging guidance.
+---
+
+Troubleshooting
+
+## Discovery search times out
+
+The sender wraps discovery in a 30-second timeout. If you see a timeout or the receiver is never found:
+
+- confirm both devices are on the same local network
+- confirm the receiver actually started `portal receive`
+- confirm you are targeting the exact configured username
+- fall back to direct IP mode if multicast discovery is unreliable on your network
+
+## Receiver fails before listening
+
+The receiver depends on config more than the old docs suggested. It needs:
+
+- a username in config
+- a port from either `--port` or `network.default_port`
+
+If either of those is missing, run `portal config setup` or set the missing keys manually.
+
+## Directories are rejected on send
+
+If you pass a directory without `-r`, the sender fails intentionally. Add the recursive flag:
+
+```bash
+portal send -r path/to/folder
+```
+
+## Partial transfers show up in history
+
+That is expected behavior. Both send and receive paths write failed history records too, including partial byte counts when available. This is useful because it tells you a transfer started and how far it got before failing.
+
+## Receiver save location is not what you expected
+
+The receiver chooses its target directory in this order:
+
+1. `--dir`
+2. `storage.download_dir` from config
+3. an interactive prompt that defaults to `~/Downloads`
+
+If downloads are landing in the wrong place, inspect config first:
+
+```bash
+portal config show storage.download_dir
+```
+
+## Logs
+
+Portal creates session log files under:
+
+```text
+~/.portal/_logs/
+```
+
+To increase logging detail for a command:
+
+- PowerShell: `$env:RUST_LOG="debug"; portal send ...`
+- Bash: `RUST_LOG=debug portal send ...`
+
+## History file location
+
+Transfer history is stored separately from the log files in:
+
+```text
+~/.portal/history.jsonl
+```
+
+That matters because log files are session-oriented, while history is transfer-oriented.

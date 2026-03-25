@@ -1,0 +1,247 @@
+---
+title: Usage
+description: Common commands for discovery, direct IP sends, history, and config.
+openGraph:
+  title: Portal CLI Usage
+  description: Learn receive, send, discovery mode, direct IP mode, and history commands.
+twitter:
+  title: Portal CLI Usage
+  description: Learn receive, send, discovery mode, direct IP mode, and history commands.
+---
+
+# Usage
+
+Portal is easiest to understand if you stop thinking of it as a giant command tree and start thinking in flows. Most real usage falls into one of three buckets:
+
+- prepare a receiver
+- send to that receiver
+- inspect or adjust the environment afterward
+
+## The shortest successful transfer
+
+On the receiving machine:
+
+```bash
+portal receive
+```
+
+On the sending machine:
+
+```bash
+portal send --to <username> path/to/file
+```
+
+That is the baseline workflow Portal is optimized around.
+
+## Discovery mode vs direct IP mode
+
+### Discovery mode
+
+Use discovery mode when both devices are on the same network and you want the safer default path.
+
+```bash
+portal receive
+portal send --to <username> path/to/file
+```
+
+What the code actually does in this mode:
+
+- it listens for multicast beacons on `224.0.0.123:5005`
+- it waits up to 30 seconds for the named receiver to appear
+- it connects over TCP only after discovery succeeds
+- it verifies the receiver's node ID before the payload starts moving
+
+Why this is the recommended mode:
+
+- it is simpler when you do not want to manually manage addresses
+- it supports identity confirmation during the flow
+- it matches the product's local-first design best
+
+### Direct IP mode
+
+Use direct IP mode when you already know the exact destination and want to bypass discovery.
+
+```bash
+portal send --address <IP_ADDRESS> --port <PORT> path/to/file
+```
+
+This is useful in controlled environments, but you give up the identity verification that discovery mode provides. The sender code connects directly and explicitly prints that the identity check was skipped.
+
+## Optional transfer descriptions
+
+The sender can attach a note to a transfer. The CLI asks whether you want to add one after the TCP connection is established.
+
+Why that matters:
+
+- the receiver sees the note when the manifest arrives
+- the description is stored in history
+- it gives real context when reviewing older transfers later
+
+## Sending folders
+
+Recursive sending is built in:
+
+```bash
+portal send -r path/to/folder
+```
+
+Without `-r`, the sender rejects directories instead of silently skipping them. That is a good default because it makes mistakes obvious.
+
+## Compression control
+
+Portal can skip gzip compression for transfer payloads:
+
+```bash
+portal send --no-compress path/to/file
+```
+
+Use that when your files are already compressed or CPU is the bottleneck instead of network throughput.
+
+## Receiver-side behavior
+
+The receiver command is intentionally simple, but there are still a few behaviors worth knowing.
+
+Receive into a specific directory:
+
+```bash
+portal receive --dir /path/to/save
+```
+
+Listen on a custom port:
+
+```bash
+portal receive --port 7878
+```
+
+If you do **not** pass `--dir`, the receiver resolves the target directory in this order:
+
+1. use the CLI `--dir` value if present
+2. otherwise use `storage.download_dir` from config if it exists
+3. otherwise prompt you for a folder, defaulting to your home `Downloads` path
+
+That means receive can still work even when your storage config is incomplete, but it will become interactive.
+
+## History is part of the workflow, not an afterthought
+
+Portal keeps transfer history locally in `~/.portal/history.jsonl`, and the records are more detailed than the old docs implied.
+
+Each record can include:
+
+- transfer mode (`send` or `receive`)
+- success or failure state
+- peer address and peer username
+- intended item counts and byte totals
+- actual item counts and byte totals
+- transfer description
+- receiver save path on receive operations
+- an error string when something failed
+
+List recent history:
+
+```bash
+portal history
+```
+
+Inspect one record:
+
+```bash
+portal history 3
+```
+
+Emit JSON:
+
+```bash
+portal history --json
+```
+
+Clear all records:
+
+```bash
+portal history clear
+```
+
+Delete one record:
+
+```bash
+portal history delete 3
+```
+
+Export records:
+
+```bash
+portal history export --output portal_history.json
+portal history export --detailed --output portal_history.json
+```
+
+## Filtering history
+
+The CLI already supports enough filtering to make history useful in practice.
+
+Filter by transfer mode:
+
+```bash
+portal history --mode send
+portal history --mode receive
+```
+
+Filter by date:
+
+```bash
+portal history --since 2026-03-16
+```
+
+Limit the number of results:
+
+```bash
+portal history --limit 20
+```
+
+## Updating Portal
+
+```bash
+portal update
+```
+
+What that command actually does depends on your platform:
+
+- Windows downloads and launches the MSI installer.
+- Linux, macOS, and Android download the release archive for the current target and replace the binary in place.
+- Portal asks for confirmation before applying the update.
+
+## Config commands you will actually use
+
+Interactive onboarding:
+
+```bash
+portal config setup
+```
+
+Change one key:
+
+```bash
+portal config set <key> <value>
+```
+
+Read one key:
+
+```bash
+portal config show <key>
+```
+
+List everything:
+
+```bash
+portal config list
+```
+
+A useful nuance from the code: `portal config set` can bootstrap a new config file even if you never ran setup first. Setup is the friendlier onboarding path, but `config set` is still a valid low-level entry point.
+
+## Practical mental model
+
+If you are teaching someone else to use Portal, the right order is:
+
+1. run setup once
+2. learn `receive`
+3. learn `send --to`
+4. use direct IP only when needed
+5. use history when a transfer needs verification or debugging
