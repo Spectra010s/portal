@@ -6,7 +6,7 @@ import { getPageMap } from "nextra/page-map";
 import "nextra-theme-docs/style.css";
 import Footer from "@/components/Footer";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
