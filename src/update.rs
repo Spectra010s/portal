@@ -1,3 +1,4 @@
+use crate::progress::stream_download_with_spinner;
 use anyhow::{Context, Error, Result};
 use flate2::read::GzDecoder;
 use inquire::Confirm;
@@ -99,8 +100,14 @@ pub async fn update_portal() -> Result<()> {
                 );
 
                 let mut tmp_file = File::create(&dest_path)?;
+                let total_bytes = response.content_length();
                 debug!("Streaming payload to temporary file...");
-                response.copy_to(&mut tmp_file)?;
+                let _ = stream_download_with_spinner(
+                    &mut response,
+                    &mut tmp_file,
+                    total_bytes,
+                    "Downloading MSI",
+                )?;
                 tmp_file.sync_all()?;
                 debug!("Download complete and synced to disk.");
 
@@ -163,9 +170,15 @@ pub async fn update_portal() -> Result<()> {
                 let tmp_dir = Builder::new().prefix("portal-").tempdir()?;
                 let tmp_file_path = tmp_dir.path().join(asset_name);
                 let mut tmp_file = File::create(&tmp_file_path)?;
+                let total_bytes = response.content_length();
 
                 debug!("Streaming payload to temporary file...");
-                response.copy_to(&mut tmp_file)?;
+                let _ = stream_download_with_spinner(
+                    &mut response,
+                    &mut tmp_file,
+                    total_bytes,
+                    "Downloading archive",
+                )?;
                 tmp_file.sync_all()?;
                 debug!("Download complete and synced to disk.");
 
