@@ -4,7 +4,7 @@ use {
     std::fs::create_dir_all,
     tracing::{debug, trace},
     tracing_appender::non_blocking::WorkerGuard,
-    tracing_subscriber::{EnvFilter, fmt, prelude::*},
+    tracing_subscriber::{filter::LevelFilter, fmt, prelude::*},
 };
 
 /// Initialize the global logger
@@ -23,15 +23,19 @@ pub async fn init() -> WorkerGuard {
     trace!("Rolling file appender configured for {:?}", log_dir);
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-
     tracing_subscriber::registry()
-        .with(filter)
+        .with(
+            fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_target(false)
+                .with_filter(LevelFilter::WARN),
+        )
         .with(
             fmt::layer()
                 .with_writer(non_blocking)
                 .with_ansi(false)
-                .with_target(false),
+                .with_target(false)
+                .with_filter(LevelFilter::DEBUG),
         )
         .init();
 
