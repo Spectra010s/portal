@@ -4,7 +4,7 @@ use {
     std::{env, fs::create_dir_all},
     tracing::{debug, trace},
     tracing_appender::non_blocking::WorkerGuard,
-    tracing_subscriber::{filter::LevelFilter, fmt, prelude::*, EnvFilter},
+    tracing_subscriber::{EnvFilter, filter::LevelFilter, fmt, prelude::*},
 };
 
 /// Initialize the global logger
