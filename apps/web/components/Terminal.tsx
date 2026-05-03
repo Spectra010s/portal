@@ -19,7 +19,7 @@ const installers = [
     label: "PowerShell",
     cmd: 'powershell -ExecutionPolicy Bypass -c "irm https://portal.build.app/install.ps1 | iex"',
   },
-  { id: "npm", label: "npm", cmd: "npm install -g @hiverra/portal@0.10.1" },
+  { id: "npm", label: "npm", cmd: "npm install -g @hiverra/portal@0.11.0" },
 ];
 
 export default function InstallTerminal() {
@@ -35,7 +35,7 @@ export default function InstallTerminal() {
           <div className="h-3 w-3 rounded-full border border-green-600 bg-green-500" />
         </div>
         <div className="ml-4 text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-          Install Portal v0.10.1
+          Install Portal v0.11.0
         </div>
       </div>
 
