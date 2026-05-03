@@ -1,14 +1,14 @@
 use {
     crate::config::models::PortalConfig,
     chrono::Local,
-    std::fs::create_dir_all,
+    std::{env, fs::create_dir_all},
     tracing::{debug, trace},
     tracing_appender::non_blocking::WorkerGuard,
-    tracing_subscriber::{EnvFilter, fmt, prelude::*},
+    tracing_subscriber::{EnvFilter, filter::LevelFilter, fmt, prelude::*},
 };
 
 /// Initialize the global logger
-pub async fn init() -> WorkerGuard {
+pub async fn init(verbose: bool, quiet: bool) -> WorkerGuard {
     // Ensure ~/.portal/_logs/ exists
     let home_dir = PortalConfig::get_dir()
         .await
@@ -22,16 +22,37 @@ pub async fn init() -> WorkerGuard {
     let file_appender = tracing_appender::rolling::never(&log_dir, &log_name);
     trace!("Rolling file appender configured for {:?}", log_dir);
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    let env_directive = env::var("PORTAL_LOG")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| env::var("RUST_LOG").ok().filter(|v| !v.trim().is_empty()));
+    let file_filter = env_directive
+        .as_deref()
+        .and_then(|raw| EnvFilter::try_new(raw).ok())
+        .unwrap_or_else(|| EnvFilter::new("debug"));
 
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let terminal_level = if quiet {
+        LevelFilter::ERROR
+    } else if verbose {
+        LevelFilter::INFO
+    } else {
+        LevelFilter::WARN
+    };
 
     tracing_subscriber::registry()
-        .with(filter)
+        .with(
+            fmt::layer()
+                .with_writer(std::io::stderr)
+                .without_time()
+                .with_target(false)
+                .with_filter(terminal_level),
+        )
         .with(
             fmt::layer()
                 .with_writer(non_blocking)
                 .with_ansi(false)
-                .with_target(false),
+                .with_target(false)
+                .with_filter(file_filter),
         )
         .init();
 
