@@ -56,7 +56,6 @@ async fn main() {
     );
     if let Err(e) = cli.command.execute().await {
         error!("Portal Error: {:#}", e);
-        eprintln!("Portal Error: {:#}", e);
         // Exit with a non-zero code to tell the OS that the program failed
         exit(1);
     }
