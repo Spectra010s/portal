@@ -235,12 +235,17 @@ portal config list
 
 Detailed guides for every workflow:
 
-- [docs/index.md](https://github.com/Spectra010s/portal/blob/main/docs/index.md)
-- [docs/install.md](https://github.com/Spectra010s/portal/blob/main/docs/install.md)
-- [docs/usage.md](https://github.com/Spectra010s/portal/blob/main/docs/usage.md)
-- [docs/cli-cli.md](https://github.com/Spectra010s/portal/blob/main/docs/cli-cli.md)
-- [docs/troubleshooting.md](https://github.com/Spectra010s/portal/blob/main/docs/troubleshooting.md)
-- [docs/faq.md](https://github.com/Spectra010s/portal/blob/main/docs/faq.md)
+- [Docs Home](https://portal.build.app/docs)
+- [Install](https://portal.build.app/docs/install)
+- [Usage](https://portal.build.app/docs/usage)
+- [CLI to CLI](https://portal.build.app/docs/cli-cli)
+- [Troubleshooting](https://portal.build.app/docs/troubleshooting)
+- [FAQ](https://portal.build.app/docs/faq)
+
+Docs source of truth:
+
+- Canonical docs live in `apps/web/content/*.mdx`.
+- Repository `docs/` markdown files were removed to avoid duplication and drift.
 
 ## Author
 
