@@ -208,6 +208,34 @@ What that command actually does depends on your platform:
 - Linux, macOS, and Android download the release archive for the current target and replace the binary in place.
 - Portal asks for confirmation before applying the update.
 
+## Logging and verbosity
+
+Portal supports `PORTAL_LOG` and `RUST_LOG` log directives.
+
+Precedence:
+
+1. `-q, --quiet` sets terminal logs to `error`.
+2. `-v, --verbose` sets terminal logs to `info`.
+3. Otherwise terminal logs use `warn` by default.
+4. For environment variables, `PORTAL_LOG` is preferred over `RUST_LOG`.
+
+Behavior:
+
+- Terminal logs are controlled by flags first (`-q` / `-v`), then default to `warn`.
+- File logs are written to `~/.portal/_logs/`.
+- File logs use `PORTAL_LOG` first, `RUST_LOG` second, and default to `debug` if neither is set.
+- For noisy or too-quiet output, see [troubleshooting](/docs/troubleshooting).
+
+Examples:
+
+```bash
+PORTAL_LOG=info portal send <path>
+PORTAL_LOG=debug portal receive
+RUST_LOG=trace portal send <path>
+portal -v send <path>
+portal -q receive
+```
+
 ## Config commands you will actually use
 
 Interactive onboarding:
