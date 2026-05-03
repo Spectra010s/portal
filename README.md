@@ -131,12 +131,36 @@ portal history
 portal history export --detailed --output portal_history.json
 ```
 
+**Verbose or quiet logs**
+
+```bash
+portal -v send --to <username> path/to/file
+portal -q receive
+```
+
+**Set log level from environment**
+
+```bash
+PORTAL_LOG=debug portal send --to <username> path/to/file
+RUST_LOG=debug portal send --to <username> path/to/file
+```
+
 **Update**
 To update Portal:
 
 ```bash
 portal update
 ```
+
+## Logging and Verbosity
+
+- `-v, --verbose`: Use verbose output.
+- `-q, --quiet`: Suppress non-error log output.
+- Default terminal log level is `warn`.
+- Default log file level is `debug`.
+- Logs are written to `~/.portal/_logs/`.
+- `PORTAL_LOG` is preferred over `RUST_LOG` when both are set.
+- For troubleshooting noisy or missing logs, see [Troubleshooting](https://portal.build.app/docs/troubleshooting).
 
 ## How to Run or Use It
 
