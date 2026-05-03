@@ -27,6 +27,7 @@ pub async fn init() -> WorkerGuard {
         .with(
             fmt::layer()
                 .with_writer(std::io::stderr)
+                .without_time()
                 .with_target(false)
                 .with_filter(LevelFilter::WARN),
         )
