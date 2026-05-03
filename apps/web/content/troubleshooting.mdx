@@ -57,10 +57,25 @@ Portal creates session log files under:
 ~/.portal/_logs/
 ```
 
-To increase logging detail for a command:
+- Terminal log defaults to `warn`.
+- Use `-v` to raise terminal logs to `info`.
+- Use `-q` to reduce terminal logs to `error`.
+- `PORTAL_LOG` is preferred over `RUST_LOG` if both are set.
+- File logs default to `debug` when neither env variable is set.
+- PowerShell: `$env:PORTAL_LOG="debug"; portal send ...`
+- Bash: `PORTAL_LOG=debug portal send ...`
+- PowerShell (fallback): `$env:RUST_LOG="debug"; portal send ...`
+- Bash (fallback): `RUST_LOG=debug portal send ...`
 
-- PowerShell: `$env:RUST_LOG="debug"; portal send ...`
-- Bash: `RUST_LOG=debug portal send ...`
+If output is too noisy:
+
+- use `portal -q ...` for terminal-only quiet mode
+- or set `PORTAL_LOG=error` to reduce log-file verbosity
+
+If output is too quiet:
+
+- use `portal -v ...` for more terminal detail
+- or set `PORTAL_LOG=debug` / `PORTAL_LOG=trace` for deeper diagnostics
 
 ## History file location
 

@@ -34,6 +34,13 @@ mod progress;
 #[command(about = "Hiverra Portal: A lightweight CLI tool to transfer files between devices.")]
 #[command(version)]
 struct Cli {
+    /// Use verbose output
+    #[arg(short, long, conflicts_with = "quiet")]
+    verbose: bool,
+    /// Suppress non-error log output
+    #[arg(short, long, conflicts_with = "verbose")]
+    quiet: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -45,7 +52,7 @@ async fn main() {
     trace!("CLI arguments parsed successfully");
 
     // start logger
-    let _log_guard = logger::init().await;
+    let _log_guard = logger::init(cli.verbose, cli.quiet).await;
     trace!("Logger guard initialized");
 
     info!("Initializing Portal v{}", env!("CARGO_PKG_VERSION"));
@@ -56,7 +63,6 @@ async fn main() {
     );
     if let Err(e) = cli.command.execute().await {
         error!("Portal Error: {:#}", e);
-        eprintln!("Portal Error: {:#}", e);
         // Exit with a non-zero code to tell the OS that the program failed
         exit(1);
     }

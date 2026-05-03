@@ -31,25 +31,25 @@ Portal is for anyone who wants a fast, local, no-fuss way to move files between 
 **Shell script (Linux/macOS)**
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Spectra010s/portal/releases/download/v0.10.1/hiverra-portal-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Spectra010s/portal/releases/download/v0.11.0/hiverra-portal-installer.sh | sh
 ```
 
 **PowerShell (Windows)**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/Spectra010s/portal/releases/download/v0.10.1/hiverra-portal-installer.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/Spectra010s/portal/releases/download/v0.11.0/hiverra-portal-installer.ps1 | iex"
 ```
 
 **npm (prebuilt binaries)**
 
 ```bash
-npm install -g @hiverra/portal@0.10.1
+npm install -g @hiverra/portal@0.11.0
 ```
 
 **Android / Termux**
 
 ```bash
-curl -LsSf https://github.com/Spectra010s/portal/releases/download/v0.10.1/hiverra-portal-android-installer.sh | sh
+curl -LsSf https://github.com/Spectra010s/portal/releases/download/v0.11.0/hiverra-portal-android-installer.sh | sh
 ```
 
 **Direct download**
@@ -131,12 +131,36 @@ portal history
 portal history export --detailed --output portal_history.json
 ```
 
+**Verbose or quiet logs**
+
+```bash
+portal -v send --to <username> path/to/file
+portal -q receive
+```
+
+**Set log level from environment**
+
+```bash
+PORTAL_LOG=debug portal send --to <username> path/to/file
+RUST_LOG=debug portal send --to <username> path/to/file
+```
+
 **Update**
 To update Portal:
 
 ```bash
 portal update
 ```
+
+## Logging and Verbosity
+
+- `-v, --verbose`: Use verbose output.
+- `-q, --quiet`: Suppress non-error log output.
+- Default terminal log level is `warn`.
+- Default log file level is `debug`.
+- Logs are written to `~/.portal/_logs/`.
+- `PORTAL_LOG` is preferred over `RUST_LOG` when both are set.
+- For troubleshooting noisy or missing logs, see [Troubleshooting](https://portal.build.app/docs/troubleshooting).
 
 ## How to Run or Use It
 
@@ -211,12 +235,17 @@ portal config list
 
 Detailed guides for every workflow:
 
-- [docs/index.md](https://github.com/Spectra010s/portal/blob/main/docs/index.md)
-- [docs/install.md](https://github.com/Spectra010s/portal/blob/main/docs/install.md)
-- [docs/usage.md](https://github.com/Spectra010s/portal/blob/main/docs/usage.md)
-- [docs/cli-cli.md](https://github.com/Spectra010s/portal/blob/main/docs/cli-cli.md)
-- [docs/troubleshooting.md](https://github.com/Spectra010s/portal/blob/main/docs/troubleshooting.md)
-- [docs/faq.md](https://github.com/Spectra010s/portal/blob/main/docs/faq.md)
+- [Docs Home](https://portal.build.app/docs)
+- [Install](https://portal.build.app/docs/install)
+- [Usage](https://portal.build.app/docs/usage)
+- [CLI to CLI](https://portal.build.app/docs/cli-cli)
+- [Troubleshooting](https://portal.build.app/docs/troubleshooting)
+- [FAQ](https://portal.build.app/docs/faq)
+
+Docs source of truth:
+
+- Canonical docs live in `apps/web/content/*.mdx`.
+- Repository `docs/` markdown files were removed to avoid duplication and drift.
 
 ## Author
 
