@@ -8,7 +8,7 @@ use {
 };
 
 /// Initialize the global logger
-pub async fn init() -> WorkerGuard {
+pub async fn init(verbose: bool, quiet: bool) -> WorkerGuard {
     // Ensure ~/.portal/_logs/ exists
     let home_dir = PortalConfig::get_dir()
         .await
@@ -23,13 +23,21 @@ pub async fn init() -> WorkerGuard {
     trace!("Rolling file appender configured for {:?}", log_dir);
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
+    let terminal_level = if quiet {
+        LevelFilter::ERROR
+    } else if verbose {
+        LevelFilter::INFO
+    } else {
+        LevelFilter::WARN
+    };
+
     tracing_subscriber::registry()
         .with(
             fmt::layer()
                 .with_writer(std::io::stderr)
                 .without_time()
                 .with_target(false)
-                .with_filter(LevelFilter::WARN),
+                .with_filter(terminal_level),
         )
         .with(
             fmt::layer()
