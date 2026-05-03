@@ -1,10 +1,10 @@
 use {
     crate::config::models::PortalConfig,
     chrono::Local,
-    std::fs::create_dir_all,
+    std::{env, fs::create_dir_all},
     tracing::{debug, trace},
     tracing_appender::non_blocking::WorkerGuard,
-    tracing_subscriber::{filter::LevelFilter, fmt, prelude::*},
+    tracing_subscriber::{filter::LevelFilter, fmt, prelude::*, EnvFilter},
 };
 
 /// Initialize the global logger
@@ -22,6 +22,14 @@ pub async fn init(verbose: bool, quiet: bool) -> WorkerGuard {
     let file_appender = tracing_appender::rolling::never(&log_dir, &log_name);
     trace!("Rolling file appender configured for {:?}", log_dir);
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    let env_directive = env::var("PORTAL_LOG")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| env::var("RUST_LOG").ok().filter(|v| !v.trim().is_empty()));
+    let file_filter = env_directive
+        .as_deref()
+        .and_then(|raw| EnvFilter::try_new(raw).ok())
+        .unwrap_or_else(|| EnvFilter::new("debug"));
 
     let terminal_level = if quiet {
         LevelFilter::ERROR
@@ -44,7 +52,7 @@ pub async fn init(verbose: bool, quiet: bool) -> WorkerGuard {
                 .with_writer(non_blocking)
                 .with_ansi(false)
                 .with_target(false)
-                .with_filter(LevelFilter::DEBUG),
+                .with_filter(file_filter),
         )
         .init();
 
