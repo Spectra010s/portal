@@ -10,7 +10,7 @@ export const contentType = "image/png";
 
 export default function Image() {
   const site = (
-    process.env.NEXT_PUBLIC_SITE_URL || "https://portal.build.app"
+    process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app"
   ).replace(/^https?:\/\//, "");
 
   return new ImageResponse(

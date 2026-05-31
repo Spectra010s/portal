@@ -106,7 +106,7 @@ export default function Image() {
             color: "#475569",
           }}
         >
-          <span style={{ display: "flex" }}>portal.build.app/docs</span>
+          <span style={{ display: "flex" }}>portal.biuld.app/docs</span>
           <span
             style={{
               display: "flex",
