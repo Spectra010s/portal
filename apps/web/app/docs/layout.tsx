@@ -65,12 +65,12 @@ const navbar = (
 );
 
 const banner = (
-  <Banner storageKey="portal-0.11.0-release">
+  <Banner storageKey="portal-0.11.1-release">
     <a
       href="https://github.com/Spectra010s/portal/releases/latest"
       target="_blank"
     >
-      🎉 Portal 0.11.0 is released. Read more →
+      🎉 Portal 0.11.1 is released. Read more →
     </a>
   </Banner>
 );
