@@ -160,7 +160,7 @@ portal update
 - Default log file level is `debug`.
 - Logs are written to `~/.portal/_logs/`.
 - `PORTAL_LOG` is preferred over `RUST_LOG` when both are set.
-- For troubleshooting noisy or missing logs, see [Troubleshooting](https://portal.build.app/docs/troubleshooting).
+- For troubleshooting noisy or missing logs, see [Troubleshooting](https://portal.biuld.app/docs/troubleshooting).
 
 ## How to Run or Use It
 
@@ -235,12 +235,12 @@ portal config list
 
 Detailed guides for every workflow:
 
-- [Docs Home](https://portal.build.app/docs)
-- [Install](https://portal.build.app/docs/install)
-- [Usage](https://portal.build.app/docs/usage)
-- [CLI to CLI](https://portal.build.app/docs/cli-cli)
-- [Troubleshooting](https://portal.build.app/docs/troubleshooting)
-- [FAQ](https://portal.build.app/docs/faq)
+- [Docs Home](https://portal.biuld.app/docs)
+- [Install](https://portal.biuld.app/docs/install)
+- [Usage](https://portal.biuld.app/docs/usage)
+- [CLI to CLI](https://portal.biuld.app/docs/cli-cli)
+- [Troubleshooting](https://portal.biuld.app/docs/troubleshooting)
+- [FAQ](https://portal.biuld.app/docs/faq)
 
 Docs source of truth:
 
