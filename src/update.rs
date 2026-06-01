@@ -20,8 +20,75 @@ use {
 #[cfg(target_os = "windows")]
 use {
     anyhow::anyhow,
-    std::{env::temp_dir, process::Command},
+    std::{
+        env::{current_exe, temp_dir, var_os},
+        path::{Path, PathBuf},
+        process::Command,
+    },
 };
+
+#[cfg(target_os = "windows")]
+fn windows_prefers_zip_update() -> bool {
+    let current = match current_exe() {
+        Ok(path) => path,
+        Err(_) => return false,
+    };
+
+    if powershell_receipt_matches(&current) {
+        return true;
+    }
+
+    default_powershell_install_path()
+        .as_deref()
+        .is_some_and(|path| same_windows_path(path, &current))
+}
+
+#[cfg(target_os = "windows")]
+fn powershell_receipt_matches(current: &Path) -> bool {
+    let Some(local_app_data) = var_os("LOCALAPPDATA") else {
+        return false;
+    };
+
+    let receipt_path = PathBuf::from(local_app_data)
+        .join("Hiverra")
+        .join("Portal")
+        .join("install.json");
+    let Ok(contents) = std::fs::read_to_string(receipt_path) else {
+        return false;
+    };
+    let Ok(receipt) = serde_json::from_str::<serde_json::Value>(&contents) else {
+        return false;
+    };
+
+    let method_matches = receipt
+        .get("method")
+        .and_then(|method| method.as_str())
+        .is_some_and(|method| method.eq_ignore_ascii_case("powershell"));
+    let path_matches = receipt
+        .get("bin_path")
+        .and_then(|path| path.as_str())
+        .map(PathBuf::from)
+        .is_some_and(|path| same_windows_path(&path, current));
+
+    method_matches && path_matches
+}
+
+#[cfg(target_os = "windows")]
+fn default_powershell_install_path() -> Option<PathBuf> {
+    var_os("LOCALAPPDATA").map(|local_app_data| {
+        PathBuf::from(local_app_data)
+            .join("Hiverra")
+            .join("Portal")
+            .join("bin")
+            .join("portal.exe")
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn same_windows_path(left: &Path, right: &Path) -> bool {
+    left.to_string_lossy()
+        .eq_ignore_ascii_case(&right.to_string_lossy())
+}
 
 pub async fn update_portal() -> Result<()> {
     //  Fetch latest release
@@ -73,16 +140,24 @@ pub async fn update_portal() -> Result<()> {
         #[cfg(target_os = "windows")]
         {
             spawn_blocking(move || -> Result<()> {
-                info!("Target platform: Windows (MSI)");
-                let tmp_dir = temp_dir();
-                let dest_path = tmp_dir.join("portal_update.msi");
+                let use_zip_update = windows_prefers_zip_update();
+                let (asset_name, asset) = if use_zip_update {
+                    info!("Target platform: Windows (PowerShell install)");
+                    let asset_name = "hiverra-portal-x86_64-pc-windows-msvc.zip";
+                    let asset = release
+                        .asset_for(asset_name, None)
+                        .context("Windows update zip asset not found")?;
+                    (asset_name, asset)
+                } else {
+                    info!("Target platform: Windows (MSI)");
+                    let asset = release.asset_for("windows", Some("msi")).ok_or_else(|| {
+                        error!("MSI asset not found for Windows");
+                        anyhow!("Could not find MSI for Windows")
+                    })?;
+                    ("portal_update.msi", asset)
+                };
 
-                let asset = release.asset_for("windows", Some("msi")).ok_or_else(|| {
-                    error!("MSI asset not found for Windows");
-                    anyhow!("Could not find MSI for Windows")
-                })?;
-
-                debug!("Downloading MSI from: {}", asset.download_url);
+                debug!("Downloading Windows update from: {}", asset.download_url);
                 let client = Client::builder()
                     .timeout(Duration::from_secs(300))
                     .build()?;
@@ -99,6 +174,15 @@ pub async fn update_portal() -> Result<()> {
                     response.content_length()
                 );
 
+                let zip_tmp_dir = if use_zip_update {
+                    Some(Builder::new().prefix("portal-").tempdir()?)
+                } else {
+                    None
+                };
+                let dest_path = zip_tmp_dir
+                    .as_ref()
+                    .map(|tmp_dir| tmp_dir.path().join(asset_name))
+                    .unwrap_or_else(|| temp_dir().join(asset_name));
                 let mut tmp_file = File::create(&dest_path)?;
                 let total_bytes = response.content_length();
                 debug!("Streaming payload to temporary file...");
@@ -106,19 +190,53 @@ pub async fn update_portal() -> Result<()> {
                     &mut response,
                     &mut tmp_file,
                     total_bytes,
-                    "Downloading MSI",
+                    if use_zip_update {
+                        "Downloading archive"
+                    } else {
+                        "Downloading MSI"
+                    },
                 )?;
                 tmp_file.sync_all()?;
                 debug!("Download complete and synced to disk.");
 
-                println!("Portal: Launching installer. This will close the current app...");
-                info!("Executing msiexec for {}", dest_path.display());
-                Command::new("msiexec")
-                    .arg("/i")
-                    .arg(&dest_path)
-                    .arg("/passive")
-                    .spawn()
-                    .context("Failed to launch MSI")?;
+                if use_zip_update {
+                    let tmp_dir = zip_tmp_dir.context("Windows zip update tempdir missing")?;
+                    let extract_dir = tmp_dir.path().join("extract");
+                    std::fs::create_dir_all(&extract_dir)?;
+                    debug!("Extracting archive to {}", extract_dir.display());
+                    let status = Command::new("powershell")
+                        .arg("-NoProfile")
+                        .arg("-Command")
+                        .arg(
+                            "& { param($archive, $dest) Expand-Archive -LiteralPath $archive -DestinationPath $dest -Force }",
+                        )
+                        .arg(&dest_path)
+                        .arg(&extract_dir)
+                        .status()
+                        .context("Failed to extract Windows update archive")?;
+
+                    if !status.success() {
+                        error!("Windows archive extraction failed with status: {}", status);
+                        anyhow::bail!("Windows archive extraction failed");
+                    }
+
+                    let new_bin = extract_dir.join("portal.exe");
+                    info!("Replacing binary with {}", new_bin.display());
+                    if let Err(e) = self_replace(&new_bin) {
+                        error!("self_replace failed: {}", e);
+                        return Err(e).context("Binary swap failed");
+                    }
+                    debug!("Binary replaced successfully.");
+                } else {
+                    println!("Portal: Launching installer. This will close the current app...");
+                    info!("Executing msiexec for {}", dest_path.display());
+                    Command::new("msiexec")
+                        .arg("/i")
+                        .arg(&dest_path)
+                        .arg("/passive")
+                        .spawn()
+                        .context("Failed to launch MSI")?;
+                }
 
                 Ok(())
             })
@@ -133,7 +251,9 @@ pub async fn update_portal() -> Result<()> {
                 // Determine asset
                 let (asset_name, is_gz) = if cfg!(target_os = "android") {
                     ("hiverra-portal-aarch64-linux-android.tar.gz", true)
-                } else if cfg!(target_os = "macos") {
+                } else if cfg!(target_os = "macos") && cfg!(target_arch = "aarch64") {
+                    ("hiverra-portal-aarch64-apple-darwin.tar.xz", false)
+                } else if cfg!(target_os = "macos") && cfg!(target_arch = "x86_64") {
                     ("hiverra-portal-x86_64-apple-darwin.tar.xz", false)
                 } else if cfg!(target_arch = "aarch64") {
                     ("hiverra-portal-aarch64-unknown-linux-gnu.tar.xz", false)
@@ -197,7 +317,12 @@ pub async fn update_portal() -> Result<()> {
                 debug!("Archive extracted successfully.");
 
                 // Replace binary
-                let new_bin = tmp_dir.path().join("portal");
+                let package_dir = if is_gz {
+                    asset_name.trim_end_matches(".tar.gz")
+                } else {
+                    asset_name.trim_end_matches(".tar.xz")
+                };
+                let new_bin = tmp_dir.path().join(package_dir).join("portal");
                 info!("Replacing binary with {}", new_bin.display());
 
                 if let Err(e) = self_replace(&new_bin) {
