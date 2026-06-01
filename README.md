@@ -247,9 +247,16 @@ Docs source of truth:
 - Canonical docs live in `apps/web/content/*.mdx`.
 - Repository `docs/` markdown files were removed to avoid duplication and drift.
 
+## Contributing and Support
+
+- [Contributing](CONTRIBUTING.md)
+- [Support](SUPPORT.md)
+- [Security Policy](SECURITY.md)
+
 ## Author
 
 Github: [Spectra010s](https://github.com/Spectra010s)
+Portfolio: [spectra010s.vercel.app](https://spectra010s.vercel.app)
 
 ## License
 
