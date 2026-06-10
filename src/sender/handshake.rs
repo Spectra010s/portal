@@ -1,5 +1,5 @@
 use {
-    crate::discovery::listener::find_receiver,
+    crate::discovery::listener::{find_receiver_broadcast, find_receiver_multicast},
     anyhow::{Context, Result, anyhow},
     inquire::Text,
     std::time::Duration,
@@ -32,12 +32,37 @@ pub async fn connect_and_verify(
         info!("Discovery started for user: {}", target_username);
         peer_username = Some(target_username.clone());
 
-        let discovery_result = timeout(
+        let discovery_result = match timeout(
             Duration::from_secs(30),
-            find_receiver(&target_username),
+            find_receiver_multicast(&target_username),
         )
         .await
-        .context("Portal: Search timed out. Make sure the receiver is active and on the same network.")??;
+        {
+            Ok(result) => result.context("Portal: Multicast discovery failed.")?,
+            Err(_) => {
+                warn!("Multicast discovery timed out for user: {}", target_username);
+                warn!("Trying subnet broadcast discovery for user: {}", target_username);
+
+                match timeout(
+                    Duration::from_secs(30),
+                    find_receiver_broadcast(&target_username),
+                )
+                .await
+                {
+                    Ok(result) => result.context("Portal: Broadcast discovery failed.")?,
+                    Err(_) => {
+                        warn!("Broadcast discovery timed out for user: {}", target_username);
+                        return Err(anyhow!(
+                            "Portal: Search timed out. Make sure the receiver is active and on the same network.\n\
+                             Portal: Try direct address mode:\n\
+                             Portal:   portal send --address <receiver-ip> --port {} <file-or-folder>\n\
+                             Tip: The receiver shows its listening address when running `portal receive`.",
+                            port
+                        ));
+                    }
+                }
+            }
+        };
 
         let (ip, id, p) = discovery_result;
         info!("Receiver found at {}:{} (Node ID: {})", ip, p, id);

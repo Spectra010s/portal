@@ -4,7 +4,6 @@ permissions:
   contents: write
 
 on:
-  pull_request:
   push:
     tags:
       - '**[0-9]+.[0-9]+.[0-9]+*'
@@ -191,7 +190,7 @@ jobs:
           $hash = (Get-FileHash "$dist/$package.zip" -Algorithm SHA256).Hash.ToLower()
           "$hash  $package.zip" | Set-Content "$dist/$package.zip.sha256"
 
-          cargo wix --no-build --target x86_64-pc-windows-msvc --input wix/main.wxs --output "$dist/$package.msi"
+          cargo wix --no-build --target x86_64-pc-windows-msvc --target-bin-dir "target/x86_64-pc-windows-msvc/release" --output "$dist/$package.msi" wix/main.wxs
           $msiHash = (Get-FileHash "$dist/$package.msi" -Algorithm SHA256).Hash.ToLower()
           "$msiHash  $package.msi" | Set-Content "$dist/$package.msi.sha256"
 
