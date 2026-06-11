@@ -31,25 +31,25 @@ Portal is for anyone who wants a fast, local, no-fuss way to move files between 
 **Shell script (Linux/macOS/Android)**
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Spectra010s/portal/releases/download/v0.11.1/hiverra-portal-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Spectra010s/portal/releases/download/v0.12.0/hiverra-portal-installer.sh | sh
 ```
 
 **PowerShell (Windows)**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/Spectra010s/portal/releases/download/v0.11.1/hiverra-portal-installer.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/Spectra010s/portal/releases/download/v0.12.0/hiverra-portal-installer.ps1 | iex"
 ```
 
 **npm (prebuilt binaries)**
 
 ```bash
-npm install -g @hiverra/portal@0.11.1
+npm install -g @hiverra/portal@0.12.0
 ```
 
 **Android / Termux**
 
 ```bash
-curl -LsSf https://github.com/Spectra010s/portal/releases/download/v0.11.1/hiverra-portal-installer.sh | sh
+curl -LsSf https://github.com/Spectra010s/portal/releases/download/v0.12.0/hiverra-portal-installer.sh | sh
 ```
 
 **Direct download**
