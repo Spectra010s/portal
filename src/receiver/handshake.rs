@@ -11,7 +11,7 @@ use {
         io::{AsyncReadExt, AsyncWriteExt},
         net::{TcpListener, TcpStream},
     },
-    tracing::{debug, error, info, trace},
+    tracing::{debug, error, info, trace, warn},
     uuid::Uuid,
 };
 
@@ -25,11 +25,6 @@ pub struct HandshakeResult {
 }
 
 pub async fn accept_and_read_manifest(port: Option<u16>) -> Result<HandshakeResult> {
-    let my_ip = get_local_ip()
-        .await
-        .context("Failed to get IP address, pls try again")?;
-    debug!("Local IP detected: {:?}", my_ip);
-
     // Use the CLI flag directly
     let n_port = if let Some(port) = port {
         trace!("Port source: CLI argument");
@@ -52,6 +47,16 @@ pub async fn accept_and_read_manifest(port: Option<u16>) -> Result<HandshakeResu
         return Err(anyhow!("No port provided and no config found"));
     };
 
+    let my_ip = get_local_ip().await;
+    if let Some(ip) = &my_ip {
+        debug!("Local IP detected: {}", ip);
+    } else {
+        warn!(
+            "Could not detect a friendly local IP; receiver is still listening on all interfaces at port {}",
+            n_port
+        );
+    }
+
     // Fetching username with load_all
     let full_cfg = PortalConfig::load_all()
         .await
@@ -73,7 +78,19 @@ pub async fn accept_and_read_manifest(port: Option<u16>) -> Result<HandshakeResu
         .await
         .context("Failed to bind to port")?;
 
-    println!("Portal: Creating wormhole at {:?}", my_ip);
+    if let Some(ip) = &my_ip {
+        println!("Portal: Creating wormhole at {}", ip);
+    } else {
+        println!("Portal: Creating wormhole on port {}.", n_port);
+        println!("Portal: Tip: To connect manually, find this device's local IP:");
+        println!("Portal:   Windows: ipconfig");
+        println!("Portal:   macOS/Linux/Android: ifconfig or ip addr");
+        println!("Portal: Then run from the sender:");
+        println!(
+            "Portal:   portal send --address <receiver-ip> --port {} <file-or-folder>",
+            n_port
+        );
+    }
     println!("Portal: Wormhole open for {:?}", username);
     info!("TCP Listener bound to {}", new_addr);
 
