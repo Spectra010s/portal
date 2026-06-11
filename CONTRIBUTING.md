@@ -52,7 +52,7 @@ Good examples:
 ```text
 fix(update): handle archive layout during self-update
 ci(release): replace cargo-dist workflow
-chore(release): bump version to 0.11.1
+chore(release): bump version to 0.12.0
 docs(web): update install instructions
 build(deps): bump tar from 0.4.45 to 0.4.46
 ```
