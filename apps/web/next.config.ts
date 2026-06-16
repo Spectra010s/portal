@@ -13,10 +13,6 @@ const withNextra = nextra({
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  webpack: (config) => {
-    config.cache = false;
-    return config;
-  },
   poweredByHeader: false,
   images: {
     remotePatterns: [

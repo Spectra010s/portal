@@ -1,0 +1,11 @@
+{
+  "name": "portal",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "web:dev": "pnpm --filter @hiverra/portal-web dev",
+    "web:build": "pnpm --filter @hiverra/portal-web build",
+    "web:start": "pnpm --filter @hiverra/portal-web start",
+    "web:lint": "pnpm --filter @hiverra/portal-web lint"
+  }
+}
