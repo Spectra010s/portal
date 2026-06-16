@@ -1,6 +1,32 @@
-.vercel
-target
+# Dependencies
+node_modules
+
+# Rust
+target/
+
+# Next.js
+.next/
+out/
+
+# Build output
 build/
 dist/
-.env*.local
-_pagefind/ 
+_pagefind/
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug logs
+npm-debug.log*
+.pnpm-debug.log*
+
+# Env files
+.env*
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
