@@ -256,7 +256,7 @@ Docs source of truth:
 ## Author
 
 Github: [Spectra010s](https://github.com/Spectra010s)
-Portfolio: [spectra010s.vercel.app](https://spectra010s.vercel.app)
+Portfolio: [spectra010s.biuld.app](https://spectra010s.biuld.app)
 
 ## License
 
