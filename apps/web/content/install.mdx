@@ -9,43 +9,38 @@ twitter:
   description: Install Portal using shell, PowerShell, or npm, then run first-time setup.
 ---
 
-import ConfigSetupDemoBlock from "@/components/docs/ConfigSetupDemoBlock";
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
-There are several ways to install Portal, but they are not equal. If you just want the tool working quickly, use one of the release installers. Build from source only if you are actively developing Portal or you need full control over the binary.
+There are several ways to install Portal. If you just want the tool working quickly, use one of the release installers. Build from source only if you are actively developing Portal or you need full control over the binary.
 
 ## Recommended install paths
 
-### Linux and macOS
-
-Use the installer script:
-
-```bash
-curl -fsSL https://portal.biuld.app/install.sh | sh
-```
-
-### Windows
-
-Use the PowerShell installer:
-
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://portal.biuld.app/install.ps1 | iex"
-```
-
-### Android / Termux
-
-Use the Android-specific installer:
-
-```bash
-curl -fsSL https://portal.biuld.app/install.sh | sh
-```
-
-### npm package
-
-If you prefer package-manager installs and want prebuilt binaries:
-
-```bash
-npm install -g @hiverra/portal@0.12.0
-```
+<Tabs items={['Linux / macOS', 'Windows (PowerShell)', 'Android (Termux)', 'npm package']}>
+  <Tab value="Linux / macOS">
+    Use the automated installer script:
+    ```bash
+    curl -fsSL https://portal.biuld.app/install.sh | sh
+    ```
+  </Tab>
+  <Tab value="Windows (PowerShell)">
+    Run the PowerShell script:
+    ```powershell
+    powershell -ExecutionPolicy Bypass -c "irm https://portal.biuld.app/install.ps1 | iex"
+    ```
+  </Tab>
+  <Tab value="Android (Termux)">
+    Run the Termux script:
+    ```bash
+    curl -fsSL https://portal.biuld.app/install.sh | sh
+    ```
+  </Tab>
+  <Tab value="npm package">
+    Install globally via npm:
+    ```bash
+    npm install -g @hiverra/portal@0.12.0
+    ```
+  </Tab>
+</Tabs>
 
 ## Build from source
 
@@ -85,7 +80,45 @@ What the code currently does with those answers:
 - It writes the result to `~/.portal/config.toml`.
 - If `config.toml` already exists, it asks before overwriting it.
 
-<ConfigSetupDemoBlock />
+<Tabs items={['1. Username', '2. Listening Port', '3. Download Location', '4. Saved config.toml']}>
+  <Tab value="1. Username">
+    Choose a unique username to identify yourself during transfers:
+    ```bash title="portal config setup"
+    $ portal config setup
+    Welcome to Portal! Let's get you set up.
+
+    ? What is your username? spectra
+    ```
+    *Note: Portal automatically appends `@portal` if you omit it, saving it as `spectra@portal`.*
+  </Tab>
+  <Tab value="2. Listening Port">
+    Select the port for listening to incoming TCP connections (7878 is recommended):
+    ```bash title="portal config setup"
+    ? Which port should Portal use? 7878
+    ```
+    *Note: Selected ports must be above 1024 to avoid root permission conflicts.*
+  </Tab>
+  <Tab value="3. Download Location">
+    Specify where Portal should save incoming files:
+    ```bash title="portal config setup"
+    ? Where should Portal save downloaded files? /home/spectra/Downloads
+    ```
+    *Note: Leaving this blank defaults to your user profile's Downloads folder.*
+  </Tab>
+  <Tab value="4. Saved config.toml">
+    Portal writes your answers to `~/.portal/config.toml`:
+    ```toml title="~/.portal/config.toml"
+    [user]
+    username = "spectra@portal"
+
+    [network]
+    default_port = 7878
+
+    [storage]
+    download_dir = "/home/spectra/Downloads"
+    ```
+  </Tab>
+</Tabs>
 
 ## What setup creates
 
