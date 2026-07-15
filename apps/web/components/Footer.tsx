@@ -1,28 +1,25 @@
 import Link from "next/link";
 import Image from "next/image";
-import ThemeToggler from "./ThemeToggler";
 
 export default function Footer() {
   return (
-    <footer className="w-full border-t border-slate-200/80 px-4 py-10 dark:border-slate-800 max-w-8xl">
+    <footer className="mx-auto w-full max-w-[1400px] border-t border-slate-200/80 px-4 md:px-8 py-10 dark:border-slate-800">
       <div className="flex flex-col items-start justify-between gap-10 lg:flex-row lg:items-start">
         {/* Brand Section */}
         <div className="flex flex-col gap-4 w-full lg:w-auto">
           <div className="flex items-center justify-between lg:justify-start lg:gap-6">
             <div className="flex items-center gap-3">
               <Image
-                src="/icon.png"
+                src="/logo.png"
                 alt="Portal"
-                width={24}
-                height={24}
+                width={28}
+                height={28}
                 className="rounded-md opacity-80"
               />
               <span className="text-sm font-bold tracking-tight text-foreground">
                 Hiverra Portal
               </span>
             </div>
-
-            <ThemeToggler />
           </div>
           <p className="max-w-xs text-xs leading-5 text-slate-500">
             High-speed, peer-to-peer transport layer for the Hiverra ecosystem.

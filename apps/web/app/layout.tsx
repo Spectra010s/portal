@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { ThemeProvider } from "next-themes";
-import Footer from "@/components/Footer";
+import { RootProvider } from "fumadocs-ui/provider/next";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app";
 
@@ -84,9 +83,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
-        </ThemeProvider>
+        <RootProvider>{children}</RootProvider>
       </body>
     </html>
   );
