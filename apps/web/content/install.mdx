@@ -75,56 +75,53 @@ What the code currently asks for:
 What the code currently does with those answers:
 
 - It appends `@portal` to your username if you did not type it.
-- It recommends port `7878`.
+- It defaults to port `7878`.
 - It defaults the download location to your home `Downloads` folder.
 - It writes the result to `~/.portal/config.toml`.
 - If `config.toml` already exists, it asks before overwriting it.
 
-<Tabs items={['1. Username', '2. Listening Port', '3. Download Location', '4. Saved config.toml']}>
-  <Tab value="1. Username">
-    Choose a unique username to identify yourself during transfers:
-    ```bash title="portal config setup"
-    $ portal config setup
-    Welcome to Portal! Let's get you set up.
+### Step-by-Step Walkthrough
 
-    ? What is your username? spectra
-    ```
-    *Note: Portal automatically appends `@portal` if you omit it, saving it as `spectra@portal`.*
-  </Tab>
-  <Tab value="2. Listening Port">
-    Select the port for listening to incoming TCP connections (7878 is recommended):
-    ```bash title="portal config setup"
-    ? Which port should Portal use? 7878
-    ```
-    *Note: Selected ports must be above 1024 to avoid root permission conflicts.*
-  </Tab>
-  <Tab value="3. Download Location">
-    Specify where Portal should save incoming files:
-    ```bash title="portal config setup"
-    ? Where should Portal save downloaded files? /home/spectra/Downloads
-    ```
-    *Note: Leaving this blank defaults to your user profile's Downloads folder.*
-  </Tab>
-  <Tab value="4. Saved config.toml">
-    Portal writes your answers to `~/.portal/config.toml`:
-    ```toml title="~/.portal/config.toml"
-    [user]
-    username = "spectra@portal"
+Run the setup command to begin:
+```bash title="Terminal"
+$ portal config setup
+Welcome to Portal! Let's get you set up.
+```
 
-    [network]
-    default_port = 7878
+#### 1. Choose Username
+Choose a unique username to identify yourself during transfers:
+```bash title="Terminal"
+? What is your username? spectra
+```
+<Callout>
+Portal automatically appends `@portal` if you omit it, saving it as `spectra@portal`.
+</Callout>
 
-    [storage]
-    download_dir = "/home/spectra/Downloads"
-    ```
-  </Tab>
-</Tabs>
+#### 2. Choose Listening Port
+Select the port for listening to incoming TCP connections (7878 is the default):
+```bash title="Terminal"
+? Which port should Portal use? 7878
+```
+<Callout type="warn">
+Selected ports must be above 1024 to avoid root permission conflicts.
+</Callout>
+
+#### 3. Choose Download Location
+Specify where Portal should save incoming files:
+```bash title="Terminal"
+? Where should Portal save downloaded files? /home/spectra/Downloads
+```
+<Callout>
+Leaving this blank defaults to your user profile's Downloads folder.
+</Callout>
 
 ## What setup creates
 
+After you finish answering the prompts, Portal automatically creates and writes your configuration to `~/.portal/config.toml`.
+
 A typical config file looks like this:
 
-```toml
+```toml title="~/.portal/config.toml"
 [user]
 username = "spectra@portal"
 
@@ -134,6 +131,7 @@ default_port = 7878
 [storage]
 download_dir = "/home/spectra/Downloads"
 ```
+
 
 ## When not to rerun setup
 
