@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import InstallTerminal from "@/components/Terminal";
 import { Radar, Network, Folder } from "lucide-react";
-import Footer from "@/components/Footer";
 import { motion } from "framer-motion";
 
 export default function Home() {
@@ -42,47 +41,8 @@ export default function Home() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col font-sans text-foreground px-4 py-8 md:py-16 bg-background">
-      <main className="mx-auto flex w-full max-w-8xl flex-col lg:px-8">
-        {/* HEADER */}
-        <motion.header
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between gap-4"
-        >
-          <Link
-            href="/"
-            className="inline-flex items-center gap-3 rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-sm font-semibold text-foreground shadow-sm backdrop-blur dark:bg-slate-900/70 dark:border-slate-800"
-          >
-            <Image
-              src="/logo.png"
-              alt="Portal Logo"
-              width={26}
-              height={26}
-              priority
-              className="rounded-lg bg-foreground dark:bg-background"
-            />
-            Portal
-          </Link>
-
-          <div className="flex items-center gap-2">
-            <Link
-              className="rounded-full border border-slate-300 px-4 py-2 text-sm transition hover:border-slate-400 hover:bg-white dark:border-slate-700 dark:hover:bg-slate-800"
-              href="https://github.com/Spectra010s/portal"
-              target="_blank"
-            >
-              GitHub
-            </Link>
-
-            <Link
-              className="rounded-full bg-background px-4 py-2 text-sm font-semibold text-foreground transition hover:opacity-90"
-              href="/docs"
-            >
-              Read Docs
-            </Link>
-          </div>
-        </motion.header>
-
+    <div className="mx-auto flex w-full max-w-7xl flex-col flex-1 px-6 py-8 md:py-16">
+      <div className="flex-1 w-full">
         {/* HERO */}
         <section className="grid items-center gap-10 py-12 md:gap-16 md:py-20 lg:grid-cols-2">
           <motion.div
@@ -292,8 +252,7 @@ export default function Home() {
             </Link>
           </div>
         </motion.section>
-      </main>
-      <Footer />
+      </div>
     </div>
   );
 }
