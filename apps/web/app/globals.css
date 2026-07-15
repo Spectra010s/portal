@@ -1,96 +1,84 @@
-@import "nextra-theme-docs/style.css";
-@import "tailwindcss";
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
 
-@custom-variant dark (&:is(.dark, .dark *));
+/* ── Portal Brand Tokens (sky-blue / slate) ── */
+@theme {
+  --color-fd-background: #f7fafc;
+  --color-fd-foreground: #0f172a;
+  --color-fd-muted: #e2e8f0;
+  --color-fd-muted-foreground: #64748b;
+  --color-fd-popover: #ffffff;
+  --color-fd-popover-foreground: #0f172a;
+  --color-fd-card: #ffffff;
+  --color-fd-card-foreground: #0f172a;
+  --color-fd-border: #e2e8f0;
+  --color-fd-primary: #007bff;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-secondary: #f1f5f9;
+  --color-fd-secondary-foreground: #0f172a;
+  --color-fd-accent: #e2e8f0;
+  --color-fd-accent-foreground: #0f172a;
+  --color-fd-ring: #007bff;
 
-:root {
-  --background: #f7fafc;
-  --foreground: #0f172a;
-  --nextra-bg: 247, 250, 252;
-  --primary: #007bff;
-  --secondary: #6f42c1;
-  --muted: #0369a1;
-  --sidebar-bg: #f7fafc;
+  /* Landing page tokens (used by page.tsx via bg-background, text-primary, etc.) */
+  --color-background: #f7fafc;
+  --color-foreground: #0f172a;
+  --color-primary: #007bff;
+  --color-secondary: #6f42c1;
+  --color-muted: #0369a1;
+
+  --font-sans: 'IBM Plex Sans', 'Avenir Next', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', 'Cascadia Code', monospace;
 }
 
-html.dark,
-[data-theme="dark"] {
-  --background: #141414;
-  --nextra-bg: 20, 20, 20;
-  --foreground: #e2e8f0;
-  --muted: #38bdf8;
-  --sidebar-bg: #141414;
+.dark {
+  --color-fd-background: #141414;
+  --color-fd-foreground: #e2e8f0;
+  --color-fd-muted: #1f1f1f;
+  --color-fd-muted-foreground: #94a3b8;
+  --color-fd-popover: #1a1a1a;
+  --color-fd-popover-foreground: #e2e8f0;
+  --color-fd-card: #1c1c1c;
+  --color-fd-card-foreground: #e2e8f0;
+  --color-fd-border: #2e2e2e;
+  --color-fd-primary: #38bdf8;
+  --color-fd-primary-foreground: #0f172a;
+  --color-fd-secondary: #1f1f1f;
+  --color-fd-secondary-foreground: #e2e8f0;
+  --color-fd-accent: #2e2e2e;
+  --color-fd-accent-foreground: #e2e8f0;
+  --color-fd-ring: #38bdf8;
+
+  /* Landing page dark overrides */
+  --color-background: #141414;
+  --color-foreground: #e2e8f0;
+  --color-muted: #38bdf8;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-primary: var(--primary);
-  --color-secondary: var(--secondary);
-  --color-muted: var(--muted);
-  --color-accent: var(--accent);
-  --font-sans: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", "SFMono-Regular", "Cascadia Code", monospace;
+.dark body {
+  background-image: linear-gradient(
+    rgba(3, 105, 161, 0.12),
+    transparent 20rem,
+    transparent
+  );
+  background-repeat: no-repeat;
 }
 
-@utility no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-  &::-webkit-scrollbar {
-    display: none;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  html:not(.light) {
-    --background: #141414;
-    --nextra-bg: 20, 20, 20;
-    --foreground: #e2e8f0;
-    --muted: #38bdf8;
-    --sidebar-bg: #141414;
-  }
-}
-
-html.dark strong,
-html.dark :not(pre) > code {
-  color: #e2e8f0;
-}
-
-html.dark :not(pre) > code {
-  background: #1e293b;
-}
-
-html.dark pre {
-  border: 1px solid #1e293b;
-  background: #020617;
-}
-
-.nextra-sidebar-container,
-.nextra-search ul,
-.nextra-mobile-menu,
-.nextra-nav-container nav {
-  background-color: var(--sidebar-bg) !important;
-  opacity: 1 !important;
-  backdrop-filter: none !important;
-  border-right: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
-}
-.nextra-sidebar-container a,
-.nextra-search input,
-.nextra-search li {
-  color: color-mix(in srgb, var(--foreground) 85%, transparent);
-  font-weight: 500;
-}
-
-.nextra-sidebar-container a:hover,
-.nextra-search li:hover,
-.nextra-search li[data-selected="true"] {
-  color: var(--primary);
-  background-color: color-mix(in srgb, var(--primary) 8%, transparent);
-}
-
+/* ── Selection ── */
 ::selection {
-  background-color: rgb(3 105 161 / 0.2);
-  color: var(--primary);
+  background-color: hsl(200 98% 32% / 0.2);
+  color: var(--color-fd-primary);
+}
+
+/* ── Scrollbar stability ── */
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
 }
 
 body {
@@ -99,62 +87,10 @@ body {
   overflow-x: hidden;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.nextra-content,
-.nextra-content main,
-.nextra-content article,
-.nextra-code-block,
-.nextra-code-block > div,
-main,
-article {
-  min-width: 0;
-  max-width: 100%;
-}
-
-.nextra-code-block {
-  overflow-x: auto;
-}
-
-pre {
-  border: 1px solid #cbd5e1;
-  border-radius: 1.25rem;
-  background: #020617;
-  color: #e2e8f0;
-  padding: 1.25rem;
-  box-sizing: border-box;
-  width: 100%;
-  overflow-x: auto;
-  max-width: 100%;
-  white-space: pre;
-}
-
-pre code {
-  background: transparent;
-  color: inherit;
-  padding: 0;
-  font-family: var(--font-mono);
-  display: block;
-  min-width: max-content;
-}
-
-code:not(pre code) {
-  color: var(--foreground);
-  background-color: rgba(127, 127, 127, 0.15);
-  padding: 0.2em 0.4em;
-  border-radius: 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.9em;
-  border: 1px solid rgba(127, 127, 127, 0.2);
-}
-
-.nextra-code-block button {
-  opacity: 1;
-  background: var(--background);
-  border: 1px solid var(--muted);
-  color: var(--foreground);
-  border-radius: 6px;
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }

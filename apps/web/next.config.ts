@@ -1,15 +1,7 @@
-import nextra from "nextra";
 import type { NextConfig } from "next";
+import { createMDX } from "fumadocs-mdx/next";
 
-const withNextra = nextra({
-  contentDirBasePath: "/docs",
-
-  defaultShowCopyCode: true,
-
-  search: true,
-  latex: true,
-  staticImage: true,
-});
+const withMDX = createMDX();
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -38,6 +30,14 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return [
+      {
+        source: '/docs/:path*.md',
+        destination: '/llms.mdx/docs/:path*',
+      },
+    ];
+  },
 };
 
-export default withNextra(nextConfig);
+export default withMDX(nextConfig);
