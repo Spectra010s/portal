@@ -13,6 +13,12 @@ build/
 dist/
 _pagefind/
 
+# Fumadocs MDX generated
+.source/
+
+# Lockfiles (pnpm only)
+package-lock.json
+
 # Misc
 .DS_Store
 *.pem

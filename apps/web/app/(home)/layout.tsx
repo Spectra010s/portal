@@ -1,51 +1,11 @@
-import { DocsLayout } from "fumadocs-ui/layouts/docs";
+import { HomeLayout } from "fumadocs-ui/layouts/home";
 import type { ReactNode } from "react";
-import type { Metadata } from "next";
-import { source } from "@/lib/source";
 import Image from "next/image";
-
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app";
-
-export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
-  title: {
-    default: "Portal Docs",
-    template: "%s | Portal Docs",
-  },
-  description:
-    "Portal documentation for installation, transfer workflows, and troubleshooting.",
-  alternates: {
-    canonical: "/docs",
-  },
-  openGraph: {
-    type: "website",
-    url: "/docs",
-    title: "Portal Docs",
-    description:
-      "Portal documentation for installation, transfer workflows, and troubleshooting.",
-    siteName: "Portal",
-    images: [
-      {
-        url: "/docs/opengraph-image",
-        width: 1200,
-        height: 630,
-        alt: "Portal Docs",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Portal Docs",
-    description:
-      "Portal documentation for installation, transfer workflows, and troubleshooting.",
-    images: ["/docs/opengraph-image"],
-  },
-};
+import Footer from "@/components/Footer";
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
-    <DocsLayout
-      tree={source.pageTree}
+    <HomeLayout
       nav={{
         title: (
           <div className="flex items-center gap-1.5">
@@ -57,11 +17,15 @@ export default function Layout({ children }: { children: ReactNode }) {
               priority
               className="rounded-lg"
             />
-            <span className="font-semibold text-foreground">Portal Docs</span>
+            <span className="font-semibold text-foreground">Portal</span>
           </div>
         ),
       }}
       links={[
+        {
+          text: "Documentation",
+          url: "/docs",
+        },
         {
           type: "icon",
           url: "https://github.com/Spectra010s/portal",
@@ -75,7 +39,12 @@ export default function Layout({ children }: { children: ReactNode }) {
         },
       ]}
     >
-      {children}
-    </DocsLayout>
+      <div className="flex flex-col flex-1">
+        <div className="flex-1 w-full">
+          {children}
+        </div>
+        <Footer />
+      </div>
+    </HomeLayout>
   );
 }
