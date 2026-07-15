@@ -5,6 +5,9 @@ All notable changes to this project will be documented in this file, structured 
 ## [Unreleased]
 
 - **fix(ci)**: grant workflow write permissions and add self-healing hash detection (#146) [[c37ffc8](https://github.com/Spectra010s/portal/commit/c37ffc8)]
+- **fix(ci)**: make changelog updater resilient to Gemini API spikes and resolve PRs (#145) [[07f4872](https://github.com/Spectra010s/portal/commit/07f4872)]
+- **ci(changelog)**: implement automated changelog updater workflow (#143) [[39ac43a](https://github.com/Spectra010s/portal/commit/39ac43a)]
+- **docs**: generate CHANGELOG.md and update installation guides (#143) [[b209884](https://github.com/Spectra010s/portal/commit/b209884)]
 - **refactor(docs)**: Use native tabs instead of custom demo components (#141) [[39644b3](https://github.com/Spectra010s/portal/commit/39644b3)]
 - **fix(web)**: Add required text property to GitHub icon link (#139) [[c9c7ec8](https://github.com/Spectra010s/portal/commit/c9c7ec8)]
 - **refactor(web)**: Migrate documentation framework from Nextra to Fumadocs (#138) [[d38b4f8](https://github.com/Spectra010s/portal/commit/d38b4f8)]
