@@ -9,11 +9,41 @@ twitter:
   description: Step-by-step receiver and sender workflow with discovery and direct IP modes.
 ---
 
-import TransferFlowDemoBlock from "@/components/docs/TransferFlowDemoBlock";
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
 This is the core workflow Portal already supports well. If someone asks what Portal can do **today**, this is the answer.
 
-<TransferFlowDemoBlock />
+<Tabs items={['Sender (portal send)', 'Receiver (portal receive)']}>
+  <Tab value="Sender (portal send)">
+    ```bash title="Terminal"
+    $ portal send --to spectra@portal ./assets
+    Portal: Searching for receiver...: spectra@portal
+    Portal: Connecting to 192.168.1.20:7878...
+    Portal: Connection established!
+    Portal: Verifying identity...
+    Portal: Identity verified. Starting transfer...
+    ? Portal: Add description for this transfer? Yes
+    ? Portal: Enter transfer description: "Design handoff assets"
+    Portal: Note: Design handoff assets
+    Portal: Preparing to send 3 items(s)...
+    Portal: All file(s) have been sent successfully!
+    ```
+  </Tab>
+  <Tab value="Receiver (portal receive)">
+    ```bash title="Terminal"
+    $ portal receive
+    Portal: Creating wormhole at 192.168.1.20
+    Portal: Wormhole open for spectra@portal
+    Portal: Connection established with 192.168.1.44:53120!
+    Portal: Connected to sender
+    Portal: Waiting for incoming files...
+    Portal: Incoming transfer - 3 item(s)
+    Portal: Sender left a note: "Design handoff assets"
+    Portal: Using directory from config: /home/spectra/Downloads
+    Portal: All item(s) have been received successfully! Saved to '/home/spectra/Downloads'
+    ```
+  </Tab>
+</Tabs>
 
 ## Step 1: prepare the receiver
 
