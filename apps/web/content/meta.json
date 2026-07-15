@@ -1,0 +1,10 @@
+{
+  "pages": [
+    "index",
+    "install",
+    "usage",
+    "cli-cli",
+    "troubleshooting",
+    "faq"
+  ]
+}
