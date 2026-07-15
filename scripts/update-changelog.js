@@ -76,10 +76,23 @@ async function main() {
     process.exit(1);
   }
 
-  // Get commit range from GitHub event
-  const before = process.env.COMMIT_BEFORE;
+  // Determine starting commit hash (before)
+  let before = process.env.COMMIT_BEFORE;
   const after = process.env.COMMIT_AFTER || 'HEAD';
   const repo = process.env.GITHUB_REPOSITORY || 'Spectra010s/portal';
+
+  try {
+    if (fs.existsSync('CHANGELOG.md')) {
+      const changelogContent = fs.readFileSync('CHANGELOG.md', 'utf8');
+      const match = changelogContent.match(/\[\[([a-f0-9]{7,})\]\]/);
+      if (match) {
+        before = match[1];
+        console.log(`Self-healing: Found last processed commit hash in CHANGELOG.md: ${before}`);
+      }
+    }
+  } catch (err) {
+    console.log("Could not parse CHANGELOG.md for a starting hash.");
+  }
   
   console.log(`Resolving commit range: before=${before}, after=${after}, repo=${repo}`);
   
