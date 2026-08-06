@@ -28,12 +28,6 @@ pub struct HistoryItem {
     pub kind: HistoryItemKind,
 }
 
-#[derive(Debug, Clone)]
-pub struct ReceiveSummary {
-    pub items: Vec<HistoryItem>,
-    pub total_bytes: u64,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransferHistoryRecord {
     pub timestamp: u64,

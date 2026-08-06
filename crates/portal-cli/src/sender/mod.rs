@@ -1,10 +1,4 @@
-mod handshake;
 mod history;
-mod manifest;
-mod send_item;
-mod stream;
-
-pub use manifest::create_file_metadata;
 
 use {
     crate::{
@@ -12,19 +6,15 @@ use {
         history::{
             HistoryItem, HistoryItemKind, HistoryStatus, TransferHistoryRecord, append_record,
         },
-        metadata::TransferItem,
         progress::ProgressManager,
         select::select_files_to_send,
     },
     anyhow::{Context, Result, anyhow},
-    bincode::serialize,
-    handshake::connect_and_verify,
     history::build_history_record,
     inquire::{Confirm, Text},
-    manifest::{create_directory_metadata, create_global_transfer_manifest},
+    pxp::metadata::TransferItem,
     std::{path::PathBuf, time::Instant},
-    stream::send_stream,
-    tokio::{io::AsyncWriteExt, net::TcpStream},
+    tokio::net::TcpStream,
     tracing::{debug, error, info, trace, warn},
 };
 
@@ -82,12 +72,49 @@ pub async fn start_send(
                 trace!("Path is a directory, recursive flag is set.");
             }
         }
-        let (stream, connected_r_addr, connected_addr, connected_username) =
-            connect_and_verify(addr, port, to).await?;
-        let mut stream: TcpStream = stream;
-        peer_addr = connected_addr;
-        peer_username = connected_username;
-        //  Ask  user if to add a description
+
+        // --- Connection ---
+        let (target_ip, target_node_id, target_port) = if let Some(direct_addr) = addr {
+            info!("Using manual IP address override: {}", direct_addr);
+            (direct_addr.clone(), None, *port)
+        } else {
+            let target_username = match to {
+                Some(username) => username.clone(),
+                None => Text::new("Portal: Enter Receiver's username:")
+                    .prompt()
+                    .context("Failed to get username")?,
+            };
+
+            println!("Portal: Searching for receiver...: {}", target_username);
+            peer_username = Some(target_username.clone());
+
+            let (ip, id, p) = pxp::sender::discover_receiver(&target_username, *port).await?;
+            (ip, Some(id), p)
+        };
+
+        let r_addr = format!("{}:{}", target_ip, target_port);
+        peer_addr = Some(target_ip.clone());
+        println!("Portal: Connecting to {}...", r_addr);
+
+        let mut stream: TcpStream = pxp::sender::connect_to_receiver(
+            &target_ip,
+            target_port,
+            target_node_id.as_deref(),
+        )
+        .await?;
+
+        println!("Portal: Connection established!");
+        if target_node_id.is_some() {
+            println!("Portal: Verifying identity...");
+            println!("Portal: Identity verified. Starting transfer...");
+        } else {
+            println!(
+                "Portal: Connected to {} (Manual mode: Identity check skipped).",
+                target_ip
+            );
+        }
+
+        // --- Description ---
         let user_desc = if Confirm::new("Portal: Add description for this transfer?")
             .with_default(false)
             .prompt()?
@@ -99,17 +126,18 @@ pub async fn start_send(
             info!("No description added to transfer.");
             None
         };
-        //  Collect all files and directories
+
+        // --- Build item list ---
         info!("Building item list for transfer...");
         let mut items_to_send: Vec<(PathBuf, TransferItem)> = Vec::new();
 
         for path in &files {
             trace!("Preparing item: {:?}", path);
             if path.is_dir() {
-                let dir_meta = create_directory_metadata(path).await?;
+                let dir_meta = pxp::sender::create_directory_metadata(path).await?;
                 items_to_send.push((path.clone(), TransferItem::Directory(dir_meta)));
             } else {
-                let file_meta = create_file_metadata(path).await?;
+                let file_meta = pxp::sender::create_file_metadata(path).await?;
                 items_to_send.push((path.clone(), TransferItem::File(file_meta)));
             }
         }
@@ -125,7 +153,7 @@ pub async fn start_send(
                     TransferItem::File(fm) => (f + 1, d, b.saturating_add(fm.file_size)),
                     TransferItem::Directory(dm) => (f, d + 1, b.saturating_add(dm.total_size)),
                 });
-        // Load sender username for manifest
+
         let sender_username = PortalConfig::load_all()
             .await
             .context("Failed to load sender user config")?
@@ -137,9 +165,9 @@ pub async fn start_send(
             info!("Sender username loaded for manifest");
         }
 
-        //  Create global manifest
+        // --- Create and send manifest ---
         let compressed = !*no_compress;
-        let global_manifest = create_global_transfer_manifest(
+        let global_manifest = pxp::sender::create_global_transfer_manifest(
             file_items,
             dir_items,
             calculated_bytes,
@@ -148,17 +176,11 @@ pub async fn start_send(
             compressed,
         )
         .await?;
-        // Start transfer timing when we begin sending the manifest
+
         start_ts_unix = TransferHistoryRecord::now_unix();
         start_instant = Instant::now();
-        // Serialize and send global manifest
-        debug!("Sending serialized global manifest...");
-        let encoded_global = serialize(&global_manifest)?;
-        let manifest_len = encoded_global.len() as u32;
-        trace!("Serialized manifest size: {} bytes", manifest_len);
 
-        stream.write_all(&manifest_len.to_be_bytes()).await?;
-        stream.write_all(&encoded_global).await?;
+        pxp::sender::send_manifest(&mut stream, &global_manifest).await?;
 
         info!("Global manifest delivered to receiver.");
         println!(
@@ -174,16 +196,13 @@ pub async fn start_send(
         let total_items = items_to_send.len();
         println!("Portal: Preparing to send {} items(s)...", total_items);
 
-        // progress manager
+        // --- Progress + history tracking ---
         let prog = ProgressManager::new();
         debug!("Progress UI created for sender");
         prog.set_total_items(total_items);
-        trace!("Progress UI initialized with total_items={}", total_items);
 
         intended_items = Vec::with_capacity(items_to_send.len());
         intended_bytes = 0;
-        sent_items = Vec::with_capacity(items_to_send.len());
-        actual_bytes = 0;
         for (_, item) in &items_to_send {
             match item {
                 TransferItem::File(fm) => {
@@ -210,20 +229,22 @@ pub async fn start_send(
             intended_bytes
         );
 
-        send_stream(
+        // Build sent_items from the items_to_send list (all will be sent if successful)
+        sent_items = intended_items.clone();
+        actual_bytes = intended_bytes;
+
+        // --- Send stream using core ---
+        pxp::sender::send_stream(
             stream,
             items_to_send,
-            &prog,
-            total_items,
-            &mut sent_items,
-            &mut actual_bytes,
             *no_compress,
+            Some(&prog as &dyn pxp::TransferProgress),
         )
         .await?;
 
         info!(
             "SUCCESS: All {} items sent and stream flushed to {}",
-            total_items, connected_r_addr
+            total_items, r_addr
         );
 
         prog.println("Portal: All file(s) have been sent successfully!");

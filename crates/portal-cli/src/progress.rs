@@ -145,3 +145,52 @@ pub fn stream_download_with_spinner<R: Read, W: Write>(
     progress.finish_with_message(format!("Portal: {} complete", label));
     Ok(downloaded)
 }
+
+// === portal-core trait implementations ===
+
+use pxp::{ItemProgress, TransferProgress};
+use tokio::io::{AsyncRead, AsyncWrite};
+
+/// Adapter that implements core's ItemProgress using an indicatif ProgressBar
+pub struct IndicatifItemProgress {
+    pb: ProgressBar,
+}
+
+impl ItemProgress for IndicatifItemProgress {
+    fn wrap_read(
+        &self,
+        reader: Box<dyn AsyncRead + Unpin + Send>,
+    ) -> Box<dyn AsyncRead + Unpin + Send> {
+        Box::new(self.pb.wrap_async_read(reader))
+    }
+
+    fn wrap_write(
+        &self,
+        writer: Box<dyn AsyncWrite + Unpin + Send>,
+    ) -> Box<dyn AsyncWrite + Unpin + Send> {
+        Box::new(self.pb.wrap_async_write(writer))
+    }
+
+    fn finish_and_clear(&self) {
+        self.pb.finish_and_clear();
+    }
+}
+
+impl TransferProgress for ProgressManager {
+    fn set_total_items(&self, total: usize) {
+        ProgressManager::set_total_items(self, total);
+    }
+
+    fn set_current_item(&self, current: usize, total: usize) {
+        ProgressManager::set_current_item(self, current, total);
+    }
+
+    fn create_item_progress(&self, name: &str, total_bytes: u64) -> Box<dyn ItemProgress> {
+        let pb = self.create_file_bar(name, total_bytes);
+        Box::new(IndicatifItemProgress { pb })
+    }
+
+    fn println(&self, msg: &str) {
+        ProgressManager::println(self, msg);
+    }
+}
