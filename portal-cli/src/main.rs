@@ -14,16 +14,10 @@ mod config {
     pub mod setup;
     pub mod show;
 }
-mod metadata;
 mod receiver;
 mod select;
 mod sender;
 mod update;
-mod discovery {
-    pub mod beacon;
-    pub mod listener;
-    pub mod protocol;
-}
 mod history;
 mod logger;
 mod progress;

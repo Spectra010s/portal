@@ -1,7 +1,10 @@
 use {
     crate::{
-        history::ReceiveSummary, progress::ProgressManager, receiver::receive_item::receive_item,
+        metadata::ReceiveSummary,
+        receiver::receive_item::receive_item,
+        ConflictResolver, TransferProgress,
     },
+    crate::error::Result,
     async_compression::tokio::bufread::GzipDecoder,
     std::path::PathBuf,
     tokio::{
@@ -17,13 +20,13 @@ pub async fn receive_stream(
     compressed: bool,
     target_dir: &PathBuf,
     total_items: u32,
-    prog: Option<ProgressManager>,
-) -> (anyhow::Result<()>, ReceiveSummary) {
+    progress: Option<&dyn TransferProgress>,
+    conflict_resolver: Option<&dyn ConflictResolver>,
+) -> (Result<()>, ReceiveSummary) {
     let mut summary = ReceiveSummary {
         items: Vec::new(),
         total_bytes: 0,
     };
-    // receive file or directories
     let reader: Box<dyn AsyncRead + Unpin + Send> = if compressed {
         debug!("Initializing Gzip decoder and Tar archive reader...");
         Box::new(GzipDecoder::new(BufReader::new(socket)))
@@ -33,7 +36,15 @@ pub async fn receive_stream(
     };
     let mut archive = Archive::new(reader);
 
-    if let Err(err) = receive_item(&mut archive, target_dir, total_items, prog, &mut summary).await
+    if let Err(err) = receive_item(
+        &mut archive,
+        target_dir,
+        total_items,
+        progress,
+        conflict_resolver,
+        &mut summary,
+    )
+    .await
     {
         return (Err(err), summary);
     }

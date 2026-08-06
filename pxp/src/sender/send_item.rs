@@ -1,10 +1,10 @@
 use {
-    crate::metadata::{FileMetadata, PortalMeta, TransferItem},
-    crate::sender::create_file_metadata,
-    anyhow::{Context, Result},
+    crate::metadata::{FileMetadata, PxpMeta, TransferItem},
+    crate::sender::manifest::create_file_metadata,
+    crate::ItemProgress,
+    crate::error::{PxpError, Result},
     async_walkdir::WalkDir,
     bincode::serialize,
-    indicatif::ProgressBar,
     std::path::PathBuf,
     tokio::{fs::File, io::AsyncWrite},
     tokio_stream::StreamExt,
@@ -17,7 +17,7 @@ pub async fn send_item<W>(
     builder: &mut Builder<W>,
     path: PathBuf,
     item: TransferItem,
-    file_pb: Option<ProgressBar>,
+    item_progress: Option<&dyn ItemProgress>,
 ) -> Result<()>
 where
     W: AsyncWrite + Unpin + Send,
@@ -25,12 +25,11 @@ where
     match item {
         TransferItem::File(file_meta) => {
             trace!(
-                "Progress UI: streaming file payload '{}' ({} bytes)",
+                "Streaming file payload '{}' ({} bytes)",
                 file_meta.filename, file_meta.file_size
             );
-            // Wrap in PortalMeta::Item and send metadata
             debug!("Serializing metadata for file: {}", file_meta.filename);
-            let meta_bytes = serialize(&PortalMeta::Item(TransferItem::File(file_meta.clone())))?;
+            let meta_bytes = serialize(&PxpMeta::Item(TransferItem::File(file_meta.clone())))?;
             trace!("Serialized file metadata size: {} bytes", meta_bytes.len());
             append_raw_meta(builder, meta_bytes).await?;
 
@@ -43,9 +42,12 @@ where
             header.set_cksum();
 
             trace!("Appending file '{}' to tar archive", file_meta.filename);
-            if let Some(pb) = file_pb.clone() {
-                let mut reader = pb.wrap_async_read(file);
-                builder.append(&header, &mut reader).await?;
+            // We use the ItemProgress wrapper to wrap the file reader before handing it off to the tar builder.
+            // As the tar builder pulls bytes from the stream, our wrapper intercepts those reads 
+            // to dynamically update the UI progress bar. This way we don't have to manually chunk the file ourselves.
+            if let Some(prog) = item_progress {
+                let mut reader = prog.wrap_read(Box::new(file));
+                builder.append(&header, &mut *reader).await?;
             } else {
                 let mut f = file;
                 builder.append(&header, &mut f).await?;
@@ -59,10 +61,9 @@ where
 
         TransferItem::Directory(dir_meta) => {
             trace!(
-                "Progress UI: streaming directory payload '{}' ({} bytes)",
+                "Streaming directory payload '{}' ({} bytes)",
                 dir_meta.dirname, dir_meta.total_size
             );
-            // tell user they are sending empty dir if empty
             if dir_meta.total_size == 0 {
                 warn!(
                     "Directory '{}' is empty; sending structure only.",
@@ -70,17 +71,15 @@ where
                 );
             }
 
-            // Top-level directory metadata
             debug!("Serializing metadata for directory: {}", dir_meta.dirname);
             let meta_bytes =
-                serialize(&PortalMeta::Item(TransferItem::Directory(dir_meta.clone())))?;
+                serialize(&PxpMeta::Item(TransferItem::Directory(dir_meta.clone())))?;
             trace!(
                 "Serialized directory metadata size: {} bytes",
                 meta_bytes.len()
             );
             append_raw_meta(builder, meta_bytes).await?;
 
-            // Append directory entry itself
             trace!(
                 "Appending directory node '{}' to tar archive",
                 dir_meta.dirname
@@ -93,11 +92,14 @@ where
             dir_header.set_cksum();
             builder.append(&dir_header, &[][..]).await?;
 
-            // Stream the contents of the directory
             debug!("Starting WalkDir for directory: {:?}", path);
+            // We need to flatten the recursive directory structure into a linear series of tar entries.
+            // WalkDir iterates through everything under the path, and for each entry, we strip the 
+            // base path to figure out its relative tar path. This makes sure nested files end up 
+            // in the correct folder structure on the receiver's end.
             let mut entries = WalkDir::new(&path);
             while let Some(entry) = entries.next().await {
-                let entry = entry.context("Portal: Failed to read directory entry")?;
+                let entry = entry.map_err(|e| PxpError::WalkDir(e.to_string()))?;
                 let file_type = entry.file_type().await?;
                 let local_path = entry.path();
                 let rel_path = local_path.strip_prefix(&path)?;
@@ -110,13 +112,12 @@ where
                 );
 
                 if file_type.is_file() {
-                    // Nested file metadata
                     debug!("Processing nested file: {}", tar_path);
                     let mut file_meta = create_file_metadata(&local_path).await?;
                     file_meta.filename = tar_path.clone();
 
                     trace!("Serializing nested file metadata for: {}", tar_path);
-                    let meta_bytes = serialize(&PortalMeta::NestedFile(file_meta.clone()))?;
+                    let meta_bytes = serialize(&PxpMeta::NestedFile(file_meta.clone()))?;
                     trace!("Nested file metadata size: {} bytes", meta_bytes.len());
                     append_raw_meta(builder, meta_bytes).await?;
 
@@ -129,9 +130,9 @@ where
                     header.set_cksum();
 
                     trace!("Appending nested file '{}' to tar archive", tar_path);
-                    if let Some(pb) = file_pb.clone() {
-                        let mut reader = pb.wrap_async_read(file);
-                        builder.append(&header, &mut reader).await?;
+                    if let Some(prog) = item_progress {
+                        let mut reader = prog.wrap_read(Box::new(file));
+                        builder.append(&header, &mut *reader).await?;
                     } else {
                         let mut f = file;
                         builder.append(&header, &mut f).await?;
@@ -139,7 +140,6 @@ where
 
                     info!("Directory file sent successfully: {}", &tar_path);
                 } else if file_type.is_dir() {
-                    // Subdirectory header
                     debug!("Processing nested directory: {}", tar_path);
                     let sub_dir_meta = FileMetadata {
                         filename: tar_path.clone(),
@@ -147,7 +147,7 @@ where
                     };
 
                     trace!("Serializing nested directory metadata for: {}", tar_path);
-                    let meta_bytes = serialize(&PortalMeta::NestedFile(sub_dir_meta))?;
+                    let meta_bytes = serialize(&PxpMeta::NestedFile(sub_dir_meta))?;
                     trace!("Nested directory metadata size: {} bytes", meta_bytes.len());
                     append_raw_meta(builder, meta_bytes).await?;
 
@@ -169,6 +169,10 @@ where
     Ok(())
 }
 
+// We inject a virtual `.portal.meta` file right before the actual data in the TAR stream.
+// This establishes a "contract" so the receiver knows exactly what to expect next 
+// (e.g., file size, original path). We do this because raw tar headers don't have enough 
+// space/flexibility for our custom metadata, and this keeps the stream self-describing.
 /// Helper to write the bincode metadata as a hidden virtual file in the tar stream
 async fn append_raw_meta<W: AsyncWrite + Unpin + Send>(
     builder: &mut Builder<W>,

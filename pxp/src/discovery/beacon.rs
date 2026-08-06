@@ -1,6 +1,6 @@
 use {
-    crate::discovery::protocol::{DISCOVERY_PORT, MULTICAST_ADDR, PROTOCOL_NAME, PortalBeacon},
-    anyhow::Result,
+    crate::discovery::protocol::{DISCOVERY_PORT, MULTICAST_ADDR, PROTOCOL_NAME, PxpBeacon},
+    crate::error::Result,
     network_interface::{Addr, NetworkInterface, NetworkInterfaceConfig},
     std::collections::BTreeSet,
     std::time::Duration,
@@ -21,7 +21,7 @@ pub async fn start_beacon(username: String, node_id: String, tcp_port: u16) -> R
     trace!("Multicast target address set to: {}", multicast_target);
     debug!("Broadcast target addresses set to: {:?}", broadcast_targets);
 
-    let beacon = PortalBeacon {
+    let beacon = PxpBeacon {
         protocol: PROTOCOL_NAME.to_string(),
         node_id,
         username,

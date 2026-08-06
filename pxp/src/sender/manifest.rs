@@ -1,6 +1,6 @@
 use {
     crate::metadata::{DirectoryMetadata, FileMetadata, GlobalTransferManifest},
-    anyhow::{Context, Result},
+    crate::error::{PxpError, Result},
     async_walkdir::WalkDir,
     std::path::PathBuf,
     tokio::fs::metadata,
@@ -28,9 +28,8 @@ pub async fn create_directory_metadata(dir: &PathBuf) -> Result<DirectoryMetadat
     debug!("Calculating total size for directory: {:?}", dir);
     let mut total_size = 0u64;
     let mut entries = WalkDir::new(dir);
-    // We walk the directory once to get the total size for the Global Manifest
     while let Some(entry) = entries.next().await {
-        let entry = entry.context("Portal: Failed to read directory entry for metadata")?;
+        let entry = entry.map_err(|e| PxpError::WalkDir(e.to_string()))?;
         let entry_path = entry.path();
         trace!("Scanning path for size calculation: {:?}", entry_path);
 

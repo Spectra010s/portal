@@ -29,7 +29,22 @@ pub enum TransferItem {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum PortalMeta {
+pub enum PxpMeta {
     Item(TransferItem),
     NestedFile(FileMetadata),
+}
+
+/// A single item that was received during a transfer.
+#[derive(Debug, Clone)]
+pub struct ReceivedItem {
+    pub name: String,
+    pub bytes: u64,
+    pub is_directory: bool,
+}
+
+/// Summary of items received during a transfer.
+#[derive(Debug, Clone)]
+pub struct ReceiveSummary {
+    pub items: Vec<ReceivedItem>,
+    pub total_bytes: u64,
 }

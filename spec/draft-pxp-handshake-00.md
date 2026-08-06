@@ -1,0 +1,86 @@
+# PXP-HANDSHAKE — Identity Verification
+
+**Parent:** [PXP](draft-pxp-overview-00.md)  
+**Transport:** TCP  
+**Phase:** 2 of 4
+
+---
+
+## 1. Purpose
+
+After the sender discovers the receiver via [PXP-DISCOVERY](draft-pxp-discovery-00.md), it opens a TCP connection. Before any file data is exchanged, the receiver MUST prove that it is the same host that sent the UDP beacon the sender matched on.
+
+This prevents a race condition where a different host binds to the same TCP port between discovery and connection.
+
+---
+
+## 2. Connection Establishment
+
+The sender opens a TCP connection to `receiver_ip:receiver_port`, where both values were obtained from the matched beacon.
+
+If the connection cannot be established within a reasonable timeout (implementation-defined, recommended 10 seconds), the sender MUST report failure.
+
+---
+
+## 3. Identity Proof (Receiver → Sender)
+
+Immediately after accepting the TCP connection, the receiver MUST send its session identity:
+
+```
++-------------------------------+-------------------------------+
+|  Length (4 bytes, big-endian) |  Session ID (UTF-8 string)    |
++-------------------------------+-------------------------------+
+```
+
+### 3.1 Fields
+
+| Field | Size | Encoding | Description |
+|---|---|---|---|
+| Length | 4 bytes | Unsigned 32-bit, big-endian | Byte length of the Session ID string that follows. |
+| Session ID | Variable | UTF-8 | The `node_id` value from this receiver's beacon. MUST be the same UUID v4 that was broadcast in the beacon. |
+
+### 3.2 Example
+
+If the session ID is `550e8400-e29b-41d4-a716-446655440000` (36 bytes):
+
+```
+Bytes 0–3:   00 00 00 24   (length = 36)
+Bytes 4–39:  35 35 30 65 38 34 30 30 ...   (UTF-8 encoded UUID)
+```
+
+---
+
+## 4. Identity Verification (Sender)
+
+The sender reads the length-prefixed Session ID from the TCP stream.
+
+### 4.1 Discovery-Based Connections
+
+If the sender discovered this receiver via PXP-DISCOVERY, it holds an `expected_node_id` from the matched beacon. The sender MUST compare the received Session ID against `expected_node_id`:
+
+- **Match:** Proceed to [PXP-MANIFEST](draft-pxp-manifest-00.md).
+- **Mismatch:** The sender MUST close the TCP connection immediately. This indicates that a different host is listening on the expected port. The sender SHOULD report this as a security error.
+
+### 4.2 Direct-Address Connections
+
+If the sender connected directly (e.g. via `--address` flag) without discovery, there is no `expected_node_id`. In this case, the sender MUST skip verification and proceed to [PXP-MANIFEST](draft-pxp-manifest-00.md). The received Session ID MAY be logged but MUST NOT cause a rejection.
+
+---
+
+## 5. Failure Modes
+
+| Condition | Sender Behavior |
+|---|---|
+| TCP connection refused | Report failure. The receiver is not listening. |
+| TCP connection times out | Report failure. Suggest direct-address mode. |
+| ID mismatch | Close connection. Report security error. |
+| Receiver closes connection before sending ID | Report failure. Connection dropped. |
+| Malformed length prefix (e.g. length > 1024) | Close connection. Report protocol error. |
+
+---
+
+## 6. Security Considerations
+
+- The identity proof is NOT authentication. It only confirms the TCP peer is the same host that sent the beacon. It does not prove the peer is trustworthy.
+- The Session ID is transmitted in plaintext. PXP does not provide encryption at this layer.
+- The `node_id` is regenerated each session, so it cannot be used to track a receiver across sessions.
