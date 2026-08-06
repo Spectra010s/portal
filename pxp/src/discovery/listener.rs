@@ -13,6 +13,11 @@ pub enum DiscoveryMode {
     Broadcast,
 }
 
+// We split discovery into two stages: Multicast first, then Broadcast.
+// Multicast is preferred because it's cleaner and routed better on most modern networks.
+// However, some restrictive routers or VPNs block multicast traffic, so if it times out, 
+// we fall back to subnet broadcast as a brute-force backup to make sure we find the receiver.
+
 pub async fn find_receiver_multicast(target_username: &str) -> Result<(String, String, u16)> {
     find_receiver(target_username, DiscoveryMode::Multicast).await
 }
@@ -32,6 +37,9 @@ async fn find_receiver(
     let raw_socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
 
     trace!("Setting SO_REUSEADDR on discovery socket");
+    // We bind with SO_REUSEADDR and SO_REUSEPORT because there might be multiple Portal instances 
+    // running on the same machine. This allows them to all listen on the same UDP discovery port 
+    // simultaneously without stepping on each other's toes.
     raw_socket.set_reuse_address(true)?;
     #[cfg(not(windows))]
     {

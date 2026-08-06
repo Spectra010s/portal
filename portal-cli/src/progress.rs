@@ -146,17 +146,24 @@ pub fn stream_download_with_spinner<R: Read, W: Write>(
     Ok(downloaded)
 }
 
-// === portal-core trait implementations ===
-
+/// PXP Trait Implementations 
+//
+// We want to keep the core `pxp` engine completely free of terminal-specific code (no println, no indicatif).
+// To do that, the engine defines abstract traits `ItemProgress` and `TransferProgress`.
+// Here in the CLI, we implement those traits using our terminal progress bar manager (`indicatif`).
+// This acts as a bridge: `pxp` handles the raw data bytes, calls these hooks, and our adapters update the terminal screen!
 use pxp::{ItemProgress, TransferProgress};
 use tokio::io::{AsyncRead, AsyncWrite};
 
-/// Adapter that implements core's ItemProgress using an indicatif ProgressBar
+/// An adapter that wraps a standard `indicatif` ProgressBar to implement the core's `ItemProgress` trait.
 pub struct IndicatifItemProgress {
     pb: ProgressBar,
 }
 
 impl ItemProgress for IndicatifItemProgress {
+    // When the core starts reading/writing a file, it calls these wrapping functions.
+    // We use indicatif's built-in wrapper streams so that as the core reads/writes bytes,
+    // the progress bar updates automatically without any manual byte counting in the engine.
     fn wrap_read(
         &self,
         reader: Box<dyn AsyncRead + Unpin + Send>,
@@ -171,12 +178,14 @@ impl ItemProgress for IndicatifItemProgress {
         Box::new(self.pb.wrap_async_write(writer))
     }
 
+    // Called when the transfer of a single item is finished. We clean up the bar from the terminal.
     fn finish_and_clear(&self) {
         self.pb.finish_and_clear();
     }
 }
 
 impl TransferProgress for ProgressManager {
+    // The core calls these to set overall transfer progress (e.g. "Sending file 2 of 5").
     fn set_total_items(&self, total: usize) {
         ProgressManager::set_total_items(self, total);
     }
@@ -185,11 +194,14 @@ impl TransferProgress for ProgressManager {
         ProgressManager::set_current_item(self, current, total);
     }
 
+    // When the core starts a new item, it requests an `ItemProgress` tracker from us.
+    // We create a fresh file progress bar and wrap it in our adapter.
     fn create_item_progress(&self, name: &str, total_bytes: u64) -> Box<dyn ItemProgress> {
         let pb = self.create_file_bar(name, total_bytes);
         Box::new(IndicatifItemProgress { pb })
     }
 
+    // Lets the core print text status messages cleanly without breaking the active progress bar layouts.
     fn println(&self, msg: &str) {
         ProgressManager::println(self, msg);
     }

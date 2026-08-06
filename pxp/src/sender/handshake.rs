@@ -80,6 +80,9 @@ pub async fn connect_to_receiver(
     trace!("Target claimed ID string: {}", claimed_id);
 
     // Verify it matches what we heard in the beacon
+    // We read the claimed UUID v4 session ID from the TCP stream and compare it against 
+    // the ID we got from the UDP beacon. We do this to prevent race conditions or stale beacons 
+    // where we might accidentally connect to a different/old receiver instance listening on the same IP.
     if let Some(expected_id) = expected_node_id {
         trace!(
             "Verifying claimed ID against expected beacon ID: {}",
