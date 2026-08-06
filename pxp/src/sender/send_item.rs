@@ -42,6 +42,9 @@ where
             header.set_cksum();
 
             trace!("Appending file '{}' to tar archive", file_meta.filename);
+            // We use the ItemProgress wrapper to wrap the file reader before handing it off to the tar builder.
+            // As the tar builder pulls bytes from the stream, our wrapper intercepts those reads 
+            // to dynamically update the UI progress bar. This way we don't have to manually chunk the file ourselves.
             if let Some(prog) = item_progress {
                 let mut reader = prog.wrap_read(Box::new(file));
                 builder.append(&header, &mut *reader).await?;
@@ -90,6 +93,10 @@ where
             builder.append(&dir_header, &[][..]).await?;
 
             debug!("Starting WalkDir for directory: {:?}", path);
+            // We need to flatten the recursive directory structure into a linear series of tar entries.
+            // WalkDir iterates through everything under the path, and for each entry, we strip the 
+            // base path to figure out its relative tar path. This makes sure nested files end up 
+            // in the correct folder structure on the receiver's end.
             let mut entries = WalkDir::new(&path);
             while let Some(entry) = entries.next().await {
                 let entry = entry.map_err(|e| PxpError::WalkDir(e.to_string()))?;
@@ -162,6 +169,10 @@ where
     Ok(())
 }
 
+// We inject a virtual `.portal.meta` file right before the actual data in the TAR stream.
+// This establishes a "contract" so the receiver knows exactly what to expect next 
+// (e.g., file size, original path). We do this because raw tar headers don't have enough 
+// space/flexibility for our custom metadata, and this keeps the stream self-describing.
 /// Helper to write the bincode metadata as a hidden virtual file in the tar stream
 async fn append_raw_meta<W: AsyncWrite + Unpin + Send>(
     builder: &mut Builder<W>,

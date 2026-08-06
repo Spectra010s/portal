@@ -21,7 +21,11 @@ use {
     tracing::{debug, error, info, trace, warn},
 };
 
-/// CLI conflict resolver using inquire::Select
+/// CLI conflict resolver using inquire::Select.
+///
+/// If a file we are trying to receive already exists, the core library will call this method
+/// to figure out what to do. Since the core doesn't know about TTYs or user prompts,
+/// we handle the CLI interaction here and return the resolved action back to the core.
 struct CliConflictResolver;
 
 impl ConflictResolver for CliConflictResolver {
@@ -34,10 +38,13 @@ impl ConflictResolver for CliConflictResolver {
             "Skip",
             "Skip All",
         ];
+        // We prompt the user interactively on the terminal using `inquire`.
+        // If the prompt fails (e.g., TTY disconnected or Ctrl-C), we map the error to our typed PxpError.
         let ans = Select::new(&format!("Portal: '{}' exists. Action?", item_name), options)
             .prompt()
             .map_err(|e| pxp::PxpError::ConflictResolution(e.to_string()))?;
 
+        // Translate the user's choice string into the corresponding core Action enum.
         match ans {
             "Overwrite" => Ok(ConflictAction::Overwrite),
             "Overwrite All" => Ok(ConflictAction::OverwriteAll),

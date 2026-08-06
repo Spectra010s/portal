@@ -48,6 +48,9 @@ where
         trace!("--- Processing archive entry {} ---", path.display());
 
         // Catch metadata
+        // We run a mini state machine here. If we see a `.portal.meta` file, we deserialize it 
+        // and hold it in `contract`. The very next entry MUST be the actual file/directory data 
+        // that matches this contract. If we get raw data without a preceding contract, we error out.
         if path.to_string_lossy().replace('\\', "/") == ".portal.meta" {
             debug!("Caught metadata block (.portal.meta)");
             let mut meta_bytes = Vec::new();
@@ -160,6 +163,9 @@ where
 
         let temp_path = target_dir.join(format!(".tmp_{}_portal", item_name));
 
+        // We clean and validate the incoming path by stripping out any weird components 
+        // (like `..` or absolute path roots). This is a crucial security measure to prevent 
+        // "Zip Slip" style attacks where a malicious sender tries to write outside the target dir.
         let safe_path = path
             .components()
             .filter(|c| matches!(c, std::path::Component::Normal(_)))
@@ -175,6 +181,10 @@ where
         let temp_exists = try_exists(&temp_path).await?;
 
         // handle conflict
+        // If the file already exists on disk, we have a collision. Rather than blindly overwriting,
+        // we intercept it and ask the resolver (which might prompt the user). 
+        // We cache global strategies like OverwriteAll, RenameAll, or SkipAll so we don't have to 
+        // keep bugging the user for every single file in a massive directory.
         if final_exists && global_strategy != ConflictStrategy::OverwriteAll {
             warn!("Conflict detected for path: {:?}", final_path);
             if global_strategy == ConflictStrategy::SkipAll {
