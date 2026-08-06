@@ -1,13 +1,10 @@
 use {
     crate::{
-        history::{HistoryItem, HistoryItemKind, ReceiveSummary},
-        metadata::{PortalMeta, TransferItem},
-        progress::ProgressManager,
+        metadata::{PxpMeta, ReceiveSummary, ReceivedItem, TransferItem},
+        ConflictAction, ConflictResolver, TransferProgress,
     },
-    anyhow::{Context, Result, anyhow},
+    crate::error::{PxpError, Result},
     bincode::deserialize,
-    indicatif::ProgressBar,
-    inquire::Select,
     std::path::PathBuf,
     tokio::{
         fs::{File, create_dir_all, remove_dir_all, remove_file, rename, try_exists},
@@ -26,38 +23,40 @@ enum ConflictStrategy {
     SkipAll,
 }
 
-/// Receives a single item (file or directory) from the tar archive
-/// including all nested files for directories. Uses metadata to validate.
+/// Receives items from the tar archive, validates metadata, and writes to disk.
 pub async fn receive_item<R>(
     archive: &mut Archive<R>,
     target_dir: &PathBuf,
     total_items: u32,
-    prog: Option<ProgressManager>,
+    progress: Option<&dyn TransferProgress>,
+    conflict_resolver: Option<&dyn ConflictResolver>,
     summary: &mut ReceiveSummary,
 ) -> Result<()>
 where
-    R: AsyncRead + Unpin + Send,
+    R: AsyncRead + Unpin + Send + 'static,
 {
-    let mut contract: Option<PortalMeta> = None;
+    let mut contract: Option<PxpMeta> = None;
     let mut global_strategy = ConflictStrategy::Prompt;
     let mut items_processed: u32 = 0;
-    let mut active_dir_pb: Option<ProgressBar> = None;
+    let mut active_dir_progress: Option<Box<dyn crate::ItemProgress>> = None;
     let mut pending_dir_success: Option<String> = None;
     let mut entries = archive.entries()?;
     while let Some(entry_result) = entries.next().await {
-        let mut entry = entry_result.context("Failed to read tar entry")?;
+        let mut entry = entry_result.map_err(|e| PxpError::Archive(e.to_string()))?;
         let path = entry.path()?.to_path_buf();
         let entry_size = entry.header().size()?;
         trace!("--- Processing archive entry {} ---", path.display());
 
         // Catch metadata
+        // We run a mini state machine here. If we see a `.portal.meta` file, we deserialize it 
+        // and hold it in `contract`. The very next entry MUST be the actual file/directory data 
+        // that matches this contract. If we get raw data without a preceding contract, we error out.
         if path.to_string_lossy().replace('\\', "/") == ".portal.meta" {
             debug!("Caught metadata block (.portal.meta)");
             let mut meta_bytes = Vec::new();
             tokio::io::copy(&mut entry, &mut meta_bytes)
-                .await
-                .context("Failed to read metadata")?;
-            let deserialized: PortalMeta = deserialize(&meta_bytes)?;
+                .await?;
+            let deserialized: PxpMeta = deserialize(&meta_bytes)?;
             trace!("Deserialized metadata content: {:?}", deserialized);
             contract = Some(deserialized);
             continue;
@@ -68,37 +67,33 @@ where
                 "Protocol error: {} arrived without preceding metadata",
                 path.display()
             );
-            anyhow!(
-                "Protocol error: data entry '{}' arrived without metadata",
-                path.display()
-            )
+            PxpError::Protocol(format!("data entry '{}' arrived without metadata", path.display()))
         })?;
         trace!(
             "Matched entry '{}' with its metadata contract.",
             path.display()
         );
 
-        let mut entry_pb: Option<ProgressBar> = None;
-        if let PortalMeta::Item(item) = &meta {
+        let mut entry_item_progress: Option<Box<dyn crate::ItemProgress>> = None;
+        if let PxpMeta::Item(item) = &meta {
             items_processed += 1;
 
-            if let Some(pm) = &prog {
-                pm.set_current_item(items_processed as usize, total_items as usize);
+            if let Some(prog) = &progress {
+                prog.set_current_item(items_processed as usize, total_items as usize);
             }
 
             match item {
                 TransferItem::File(f) => {
                     trace!(
-                        "Progress UI: starting file item '{}' ({} bytes)",
+                        "Starting file item '{}' ({} bytes)",
                         f.filename, f.file_size
                     );
-                    summary.items.push(HistoryItem {
+                    summary.items.push(ReceivedItem {
                         name: f.filename.clone(),
                         bytes: f.file_size,
-                        kind: HistoryItemKind::File,
+                        is_directory: false,
                     });
                     summary.total_bytes = summary.total_bytes.saturating_add(f.file_size);
-                    trace!("History tracker: recorded received file '{}'", f.filename);
                     info!(
                         "Incoming top-level file: {} ({} bytes)",
                         f.filename, f.file_size
@@ -106,19 +101,15 @@ where
                 }
                 TransferItem::Directory(d) => {
                     trace!(
-                        "Progress UI: starting directory item '{}' ({} bytes)",
+                        "Starting directory item '{}' ({} bytes)",
                         d.dirname, d.total_size
                     );
-                    summary.items.push(HistoryItem {
+                    summary.items.push(ReceivedItem {
                         name: d.dirname.clone(),
                         bytes: d.total_size,
-                        kind: HistoryItemKind::Directory,
+                        is_directory: true,
                     });
                     summary.total_bytes = summary.total_bytes.saturating_add(d.total_size);
-                    trace!(
-                        "History tracker: recorded received directory '{}'",
-                        d.dirname
-                    );
                     info!(
                         "Incoming top-level directory: {} ({} bytes)",
                         d.dirname, d.total_size
@@ -132,33 +123,31 @@ where
                     "SECURITY ALERT: Sender attempted to send more items than manifest allowed ({} > {})",
                     items_processed, total_items
                 );
-                return Err(anyhow!(
-                    "Security Alert: Sender sent more items than manifest allowed"
+                return Err(PxpError::Security(
+                    "Sender sent more items than manifest allowed".into()
                 ));
             }
 
-            // Close any active directory progress bar before starting a new top-level item
-            if let Some(pb) = active_dir_pb.take() {
-                pb.finish_and_clear();
+            // Close any active directory progress before starting a new top-level item
+            if let Some(dir_prog) = active_dir_progress.take() {
+                dir_prog.finish_and_clear();
                 if let Some(dir_name) = pending_dir_success.take() {
-                    if let Some(pm) = &prog {
-                        pm.println(format!(
+                    if let Some(prog) = &progress {
+                        prog.println(&format!(
                             "Portal: Directory '{}' received successfully!",
                             dir_name
                         ));
-                    } else {
-                        println!("Portal: Directory '{}' received successfully!", dir_name);
                     }
                 }
             }
 
-            if let Some(pm) = &prog {
+            if let Some(prog) = &progress {
                 match item {
                     TransferItem::File(f) => {
-                        entry_pb = Some(pm.create_file_bar(&f.filename, f.file_size));
+                        entry_item_progress = Some(prog.create_item_progress(&f.filename, f.file_size));
                     }
                     TransferItem::Directory(d) => {
-                        active_dir_pb = Some(pm.create_file_bar(&d.dirname, d.total_size));
+                        active_dir_progress = Some(prog.create_item_progress(&d.dirname, d.total_size));
                         pending_dir_success = Some(d.dirname.clone());
                     }
                 }
@@ -174,6 +163,9 @@ where
 
         let temp_path = target_dir.join(format!(".tmp_{}_portal", item_name));
 
+        // We clean and validate the incoming path by stripping out any weird components 
+        // (like `..` or absolute path roots). This is a crucial security measure to prevent 
+        // "Zip Slip" style attacks where a malicious sender tries to write outside the target dir.
         let safe_path = path
             .components()
             .filter(|c| matches!(c, std::path::Component::Normal(_)))
@@ -189,6 +181,10 @@ where
         let temp_exists = try_exists(&temp_path).await?;
 
         // handle conflict
+        // If the file already exists on disk, we have a collision. Rather than blindly overwriting,
+        // we intercept it and ask the resolver (which might prompt the user). 
+        // We cache global strategies like OverwriteAll, RenameAll, or SkipAll so we don't have to 
+        // keep bugging the user for every single file in a massive directory.
         if final_exists && global_strategy != ConflictStrategy::OverwriteAll {
             warn!("Conflict detected for path: {:?}", final_path);
             if global_strategy == ConflictStrategy::SkipAll {
@@ -197,46 +193,38 @@ where
             } else if global_strategy == ConflictStrategy::RenameAll {
                 final_path = get_unused_path(final_path).await;
                 debug!("Strategy RenameAll: new path {:?}", final_path);
-            } else {
-                // check user input to know next step
-                let options = vec![
-                    "Overwrite",
-                    "Overwrite All",
-                    "Rename",
-                    "Rename All",
-                    "Skip",
-                    "Skip All",
-                ];
-                let ans = Select::new(&format!("Portal: '{}' exists. Action?", item_name), options)
-                    .prompt()?;
-                trace!("User selected conflict resolution: {}", ans);
+            } else if let Some(resolver) = conflict_resolver {
+                let action = resolver.resolve(&item_name)?;
+                trace!("Conflict resolver returned: {:?}", action);
 
-                match ans {
-                    "Overwrite" => info!("User chose to overwrite {:?}", item_name),
-                    "Overwrite All" => {
-                        info!("User enabled Overwrite All strategy");
+                match action {
+                    ConflictAction::Overwrite => info!("Chose to overwrite {:?}", item_name),
+                    ConflictAction::OverwriteAll => {
+                        info!("Enabled Overwrite All strategy");
                         global_strategy = ConflictStrategy::OverwriteAll;
                     }
-                    "Rename" => {
+                    ConflictAction::Rename => {
                         final_path = get_unused_path(final_path).await;
-                        info!("User chose to rename to {:?}", final_path);
+                        info!("Chose to rename to {:?}", final_path);
                     }
-                    "Rename All" => {
-                        info!("User enabled Rename All strategy");
+                    ConflictAction::RenameAll => {
+                        info!("Enabled Rename All strategy");
                         global_strategy = ConflictStrategy::RenameAll;
                         final_path = get_unused_path(final_path).await;
                     }
-                    "Skip" => {
-                        info!("User skipped item {:?}", item_name);
+                    ConflictAction::Skip => {
+                        info!("Skipped item {:?}", item_name);
                         continue;
                     }
-                    "Skip All" => {
-                        info!("User enabled Skip All strategy");
+                    ConflictAction::SkipAll => {
+                        info!("Enabled Skip All strategy");
                         global_strategy = ConflictStrategy::SkipAll;
                         continue;
                     }
-                    _ => unreachable!(),
                 }
+            } else {
+                // No conflict resolver provided, default to overwrite
+                info!("No conflict resolver: defaulting to overwrite {:?}", item_name);
             }
         }
 
@@ -254,17 +242,18 @@ where
                 item_name
             );
             let file_in_temp = temp_path.join(&item_name);
-            let mut outfile = File::create(&file_in_temp).await?;
+            let outfile = File::create(&file_in_temp).await?;
 
-            // Top-level file bar (if present), otherwise reuse active directory bar.
-            if let Some(pb) = entry_pb.take() {
-                let mut writer = pb.wrap_async_write(outfile);
-                tokio::io::copy(&mut entry, &mut writer).await?;
-                pb.finish_and_clear();
-            } else if let Some(pb) = &active_dir_pb {
-                let mut reader = pb.wrap_async_read(entry);
-                tokio::io::copy(&mut reader, &mut outfile).await?;
+            if let Some(prog) = entry_item_progress.take() {
+                let mut writer = prog.wrap_write(Box::new(outfile));
+                tokio::io::copy(&mut entry, &mut *writer).await?;
+                prog.finish_and_clear();
+            } else if let Some(prog) = &active_dir_progress {
+                let mut reader = prog.wrap_read(Box::new(entry));
+                let mut outfile = outfile;
+                tokio::io::copy(&mut *reader, &mut outfile).await?;
             } else {
+                let mut outfile = outfile;
                 tokio::io::copy(&mut entry, &mut outfile).await?;
             }
         }
@@ -292,17 +281,15 @@ where
 
         // validate metadata
         match meta {
-            PortalMeta::Item(item) => match item {
+            PxpMeta::Item(item) => match item {
                 TransferItem::File(f) => {
-                    // Compare for integrity
-
                     if f.filename != path.to_string_lossy() {
                         error!(
                             "Filename mismatch: Expected {}, got {}",
                             f.filename,
                             path.display()
                         );
-                        return Err(anyhow!("Protocol error: Top-level filename mismatch"));
+                        return Err(PxpError::Protocol("Top-level filename mismatch".into()));
                     }
                     if f.file_size != entry_size {
                         error!(
@@ -313,22 +300,19 @@ where
                             "Verification failure detail: manifest_size={} vs header_size={}",
                             f.file_size, entry_size
                         );
-                        return Err(anyhow!("Protocol error: Top-level file size mismatch"));
+                        return Err(PxpError::Protocol("Top-level file size mismatch".into()));
                     }
                     trace!(
                         "Self-check: file size matches manifest ({} bytes)",
                         f.file_size
                     );
-                    if let Some(pm) = &prog {
-                        pm.println(&format!(
+                    if let Some(prog) = &progress {
+                        prog.println(&format!(
                             "Portal: File '{}' received successfully!",
                             f.filename
                         ));
-                    } else {
-                        println!("Portal: File '{}' received successfully!", f.filename);
                     }
                     info!("Successfully verified and saved: {}", f.filename);
-                    trace!("Progress UI: completed file item '{}'", f.filename);
                 }
                 TransferItem::Directory(d) => {
                     if d.dirname != path.to_string_lossy().replace('\\', "/") {
@@ -337,47 +321,43 @@ where
                             d.dirname,
                             path.display()
                         );
-                        return Err(anyhow!("Protocol error: Top-level directory name mismatch"));
+                        return Err(PxpError::Protocol("Top-level directory name mismatch".into()));
                     }
                     info!("Successfully verified and saved directory: {}", d.dirname);
-                    trace!("Progress UI: completed directory item '{}'", d.dirname);
                 }
             },
-            PortalMeta::NestedFile(f) => {
+            PxpMeta::NestedFile(f) => {
                 debug!("Verifying nested item: {}", f.filename);
                 if f.filename != path.to_string_lossy().replace('\\', "/") {
-                    return Err(anyhow!(
-                        "Protocol error: Directory filename mismatch. Expected '{}', got '{}'",
+                    return Err(PxpError::Protocol(format!(
+                        "Directory filename mismatch. Expected '{}', got '{}'",
                         f.filename,
                         path.display()
-                    ));
+                    )));
                 }
-                // Compare size for integrity
                 if !is_dir && f.file_size != entry_size {
                     trace!(
                         "Nested file verification failure: {} (manifest: {}, header: {})",
                         f.filename, f.file_size, entry_size
                     );
-                    return Err(anyhow!(
-                        "Protocol error: Directory file size mismatch for '{}'",
+                    return Err(PxpError::Protocol(format!(
+                        "Directory file size mismatch for '{}'",
                         f.filename
-                    ));
+                    )));
                 }
                 trace!("Nested item size verified: {} bytes", f.file_size);
                 info!("Nested item verified and saved: {}", f.filename);
             }
         }
     }
-    if let Some(pb) = active_dir_pb.take() {
-        pb.finish_and_clear();
+    if let Some(dir_prog) = active_dir_progress.take() {
+        dir_prog.finish_and_clear();
         if let Some(dir_name) = pending_dir_success.take() {
-            if let Some(pm) = &prog {
-                pm.println(format!(
+            if let Some(prog) = &progress {
+                prog.println(&format!(
                     "Portal: Directory '{}' received successfully!",
                     dir_name
                 ));
-            } else {
-                println!("Portal: Directory '{}' received successfully!", dir_name);
             }
         }
     }
@@ -386,11 +366,11 @@ where
             "Transfer failed: manifest expected {} items, only received {}",
             total_items, items_processed
         );
-        return Err(anyhow!(
+        return Err(PxpError::Protocol(format!(
             "Transfer incomplete: Expected {} items, only got {}",
             total_items,
             items_processed
-        ));
+        )));
     }
     info!("All {} items received and verified.", items_processed);
     Ok(())
@@ -399,7 +379,6 @@ where
 /// helper to get path for incremental renaming
 async fn get_unused_path(path: PathBuf) -> PathBuf {
     let mut n = 1;
-    // Provide safe defaults instead of crashing
     let stem = path
         .file_stem()
         .map(|s| s.to_string_lossy())

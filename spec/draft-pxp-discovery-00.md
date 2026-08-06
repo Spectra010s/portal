@@ -1,0 +1,123 @@
+# PXP-DISCOVERY — Peer Discovery
+
+**Parent:** [PXP](draft-pxp-overview-00.md)  
+**Transport:** UDP  
+**Phase:** 1 of 4
+
+---
+
+## 1. Purpose
+
+Before a file transfer can begin, the sender must locate the receiver on the local network. PXP-DISCOVERY defines how a receiver advertises its presence and how a sender finds it — without requiring the user to know IP addresses or ports.
+
+---
+
+## 2. Constants
+
+| Name | Value | Description |
+|---|---|---|
+| `DISCOVERY_PORT` | `5005` | UDP port used for all beacon traffic. |
+| `MULTICAST_ADDR` | `224.0.0.123` | IPv4 multicast group for beacon delivery. |
+| `PROTOCOL_NAME` | `"portal"` | Protocol identifier embedded in every beacon. |
+| `BEACON_INTERVAL` | 1 second | Time between consecutive beacon emissions. |
+
+---
+
+## 3. Beacon Message
+
+A beacon is a single UDP datagram containing a JSON object. There is no framing — the entire datagram payload is the JSON body.
+
+### 3.1 Schema
+
+```
+{
+  "protocol":  <string>,
+  "node_id":   <string>,
+  "username":  <string>,
+  "port":      <integer>
+}
+```
+
+### 3.2 Fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `protocol` | string | MUST | MUST be the literal string `"portal"`. Receivers and senders MUST ignore beacons where this field does not match. |
+| `node_id` | string | MUST | A UUID v4 generated fresh on each receiver session. This value is used during the [PXP-HANDSHAKE](draft-pxp-handshake-00.md) to verify that the TCP peer is the same host that sent the beacon. |
+| `username` | string | MUST | The receiver's human-readable identifier (e.g. `"alice@portal"`). The sender matches on this field to locate a specific receiver. |
+| `port` | integer | MUST | The TCP port on which the receiver is listening for incoming transfer connections. |
+
+### 3.3 Example
+
+```json
+{
+  "protocol": "portal",
+  "node_id": "550e8400-e29b-41d4-a716-446655440000",
+  "username": "alice@portal",
+  "port": 7878
+}
+```
+
+---
+
+## 4. Beacon Emission (Receiver Behavior)
+
+The receiver MUST begin emitting beacons before it starts listening for TCP connections.
+
+### 4.1 Socket Setup
+
+1. Bind a UDP socket to `0.0.0.0:0` (ephemeral port).
+2. Enable `SO_BROADCAST` on the socket.
+
+### 4.2 Emission Targets
+
+Every `BEACON_INTERVAL`, the receiver MUST send the beacon to ALL of the following destinations on port `DISCOVERY_PORT`:
+
+1. **Multicast:** `224.0.0.123:5005`
+2. **Subnet broadcasts:** For each non-loopback IPv4 network interface, send to that interface's broadcast address (e.g. `192.168.1.255:5005`).
+3. **Global broadcast fallback:** If no subnet broadcast addresses are found, send to `255.255.255.255:5005`.
+
+Failures to send to any individual target SHOULD be logged but MUST NOT terminate the beacon loop.
+
+### 4.3 Termination
+
+The receiver SHOULD stop emitting beacons once a TCP connection has been accepted and the handshake has completed.
+
+---
+
+## 5. Beacon Listening (Sender Behavior)
+
+### 5.1 Socket Setup
+
+1. Create a UDP socket.
+2. Set `SO_REUSEADDR` (and `SO_REUSEPORT` on non-Windows platforms).
+3. Bind to `0.0.0.0:DISCOVERY_PORT`.
+4. For multicast mode: join multicast group `MULTICAST_ADDR` on `INADDR_ANY`.
+
+### 5.2 Discovery Strategy
+
+The sender SHOULD attempt discovery in two stages:
+
+1. **Multicast** — Listen for beacons on the multicast group. Timeout: 30 seconds.
+2. **Broadcast fallback** — If multicast times out, listen for broadcast beacons on the same socket (without joining a multicast group). Timeout: 30 seconds.
+
+If both stages time out, the sender MUST report failure and MAY suggest the user try direct-address mode.
+
+### 5.3 Beacon Matching
+
+For each received datagram:
+
+1. Deserialize the payload as JSON.
+2. Discard if `protocol` is not `"portal"`.
+3. Discard if `username` does not match the target username.
+4. On match: extract `(source_ip, node_id, port)` and proceed to [PXP-HANDSHAKE](draft-pxp-handshake-00.md).
+
+The receive buffer MUST be at least 1024 bytes.
+
+---
+
+## 6. Security Considerations
+
+- Beacons are sent in plaintext. Any device on the same network segment can observe them.
+- The `node_id` serves as a session-scoped nonce for identity verification, not as a secret.
+- Implementations SHOULD NOT include sensitive information in the `username` field.

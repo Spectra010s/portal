@@ -5,9 +5,7 @@ use {
 };
 
 /// Searches for the first available IPv4 address on common Wi-Fi interface names
-
 pub async fn get_local_ip() -> Option<String> {
-    // Retrieve all network interfaces
     trace!("Retrieving all network interfaces...");
     let interfaces = NetworkInterface::show().ok()?;
     trace!("Found {} interfaces", interfaces.len());
@@ -20,7 +18,6 @@ pub async fn get_local_ip() -> Option<String> {
             interface.addr.len()
         );
 
-        // Comprehensive check
         if name.contains("wlan")
             || name.contains("wlp")
             || name.contains("wi-fi")
@@ -32,7 +29,6 @@ pub async fn get_local_ip() -> Option<String> {
             );
             for addr in interface.addr {
                 trace!("Found address: {:?}", addr.ip());
-                // Filter for IPv4 and ignore loopback with check
                 if let IpAddr::V4(ipv4) = addr.ip() {
                     if !ipv4.is_loopback() {
                         debug!("Selected suitable local IPv4: {}", ipv4);

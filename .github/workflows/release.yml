@@ -24,7 +24,7 @@ jobs:
       - id: version
         shell: bash
         run: |
-          cargo_version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          cargo_version=$(sed -n 's/^version = "\(.*\)"/\1/p' portal-cli/Cargo.toml | head -n 1)
           tag="${GITHUB_REF_NAME:-}"
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -190,7 +190,7 @@ jobs:
           $hash = (Get-FileHash "$dist/$package.zip" -Algorithm SHA256).Hash.ToLower()
           "$hash  $package.zip" | Set-Content "$dist/$package.zip.sha256"
 
-          cargo wix --no-build --target x86_64-pc-windows-msvc --target-bin-dir "target/x86_64-pc-windows-msvc/release" --output "$dist/$package.msi"
+          cargo wix -p hiverra-portal --no-build --target x86_64-pc-windows-msvc --target-bin-dir "target/x86_64-pc-windows-msvc/release" --output "$dist/$package.msi"
           $msiHash = (Get-FileHash "$dist/$package.msi" -Algorithm SHA256).Hash.ToLower()
           "$msiHash  $package.msi" | Set-Content "$dist/$package.msi.sha256"
 
