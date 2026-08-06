@@ -757,9 +757,6 @@ name = "hiverra-portal"
 version = "0.12.0"
 dependencies = [
  "anyhow",
- "astral-tokio-tar",
- "async-compression",
- "async-walkdir",
  "bincode",
  "chrono",
  "clap",
@@ -767,24 +764,20 @@ dependencies = [
  "home",
  "indicatif 0.18.4",
  "inquire",
- "network-interface",
+ "pxp",
  "rand 0.10.1",
  "reqwest",
  "self-replace",
  "self_update",
  "serde",
  "serde_json",
- "socket2",
  "tar",
  "tempfile",
  "tokio",
- "tokio-stream",
  "toml",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "uuid",
- "walkdir",
  "xz2",
 ]
 
@@ -1412,6 +1405,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "pxp"
+version = "0.1.0"
+dependencies = [
+ "astral-tokio-tar",
+ "async-compression",
+ "async-walkdir",
+ "bincode",
+ "network-interface",
+ "serde",
+ "serde_json",
+ "socket2",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "quick-xml"
 version = "0.37.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1725,15 +1737,6 @@ name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
-
-[[package]]
-name = "same-file"
-version = "1.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
-dependencies = [
- "winapi-util",
-]
 
 [[package]]
 name = "schannel"
@@ -2415,16 +2418,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
-name = "walkdir"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
-dependencies = [
- "same-file",
- "winapi-util",
-]
-
-[[package]]
 name = "want"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2594,15 +2587,6 @@ name = "winapi-i686-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
-
-[[package]]
-name = "winapi-util"
-version = "0.1.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
-dependencies = [
- "windows-sys 0.61.2",
-]
 
 [[package]]
 name = "winapi-x86_64-pc-windows-gnu"
