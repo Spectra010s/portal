@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file, structured 
 
 ## [Unreleased]
 
+- **docs(web)**: Update pxp library dependency instructions (#153) [[aa242db](https://github.com/Spectra010s/portal/commit/aa242db)]
+- **docs(pxp)**: Add TODO list for PXP protocol improvements (#153) [[fa06aeb](https://github.com/Spectra010s/portal/commit/fa06aeb)]
+- **docs(config)**: Clarify markdown usage rules in AI commit prompt (#153) [[6c6cfc4](https://github.com/Spectra010s/portal/commit/6c6cfc4)]
+- **docs(web)**: Introduce CLI documentation and section icons (#153) [[8451c50](https://github.com/Spectra010s/portal/commit/8451c50)]
+- **refactor(cli)**: Organize documentation content (#153) [[fc637a4](https://github.com/Spectra010s/portal/commit/fc637a4)]
+- **build(deps)**: Update Next.js dependency from 16.3.0 to 16.3.1 (#153) [[fc637a4](https://github.com/Spectra010s/portal/commit/fc637a4)]
+- **docs(protocol)**: Add PXP protocol specification (#153) [[74834c0](https://github.com/Spectra010s/portal/commit/74834c0)]
+- **docs(library)**: Add pxp library overview and usage guide (#153) [[74834c0](https://github.com/Spectra010s/portal/commit/74834c0)]
+- **build(deps)**: Bump web application and pnpm dependencies (#153) [[74834c0](https://github.com/Spectra010s/portal/commit/74834c0)]
 - **build(deps)**: bump quinn-proto from 0.11.14 to 0.11.16 (#150) [[8482da3](https://github.com/Spectra010s/portal/commit/8482da3)]
 - **docs(changelog)**: manually add missing entries for PR 143 and 145 [[c181dd9](https://github.com/Spectra010s/portal/commit/c181dd9)]
 - **fix(ci)**: grant workflow write permissions and add self-healing hash detection (#146) [[c37ffc8](https://github.com/Spectra010s/portal/commit/c37ffc8)]
