@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file, structured 
 
 ## [Unreleased]
 
+- **fix(release)**: resolve Windows MSI build after workspace restructure (#156) [[cee59f0](https://github.com/Spectra010s/portal/commit/cee59f0)]
 - **build(deps)**: bump postcss from 8.4.31 to 8.5.23 (#154) [[23ef939](https://github.com/Spectra010s/portal/commit/23ef939)]
 - **docs(web)**: Update pxp library dependency instructions (#153) [[aa242db](https://github.com/Spectra010s/portal/commit/aa242db)]
 - **docs(pxp)**: Add TODO list for PXP protocol improvements (#153) [[fa06aeb](https://github.com/Spectra010s/portal/commit/fa06aeb)]
