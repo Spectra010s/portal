@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file, structured 
 
 ## [Unreleased]
 
+- **ci(release)**: Create GitHub release only after npm publishes [[ea19745](https://github.com/Spectra010s/portal/commit/ea19745)]
 - **ci(release)**: Support manual workflow_dispatch trigger [[ee3eca0](https://github.com/Spectra010s/portal/commit/ee3eca0)]
 - **ci(release)**: Migrate npm publishing to OIDC and a local package dir (#159) [[7880784](https://github.com/Spectra010s/portal/commit/7880784)]
 - **fix(release)**: correct license RTF path after wix moved into portal-cli [[fc8ffdc](https://github.com/Spectra010s/portal/commit/fc8ffdc)]
