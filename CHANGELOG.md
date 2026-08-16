@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file, structured 
 
 ## [Unreleased]
 
+- **ci(release)**: Revert one-time workflow_dispatch trigger [[8b4e51f](https://github.com/Spectra010s/portal/commit/8b4e51f)]
 - **fix(npm)**: add repository.url for provenance validation [[fa75947](https://github.com/Spectra010s/portal/commit/fa75947)]
 - **ci(release)**: Ensure npm >= 11.5.1 for OIDC trusted publishing [[7456471](https://github.com/Spectra010s/portal/commit/7456471)]
 - **ci(release)**: Create GitHub release only after npm publishes [[ea19745](https://github.com/Spectra010s/portal/commit/ea19745)]
