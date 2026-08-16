@@ -1,0 +1,12 @@
+{
+  "title": "PXP Protocol",
+  "icon": "Network",
+  "root": true,
+  "pages": [
+    "overview",
+    "discovery",
+    "handshake",
+    "manifest",
+    "streaming"
+  ]
+}

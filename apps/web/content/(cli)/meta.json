@@ -1,0 +1,13 @@
+{
+  "title": "Portal CLI",
+  "icon": "Terminal",
+  "root": true,
+  "pages": [
+    "index",
+    "install",
+    "cli-cli",
+    "usage",
+    "faq",
+    "troubleshooting"
+  ]
+}
