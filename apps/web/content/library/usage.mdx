@@ -1,0 +1,165 @@
+---
+title: Library Usage Guide
+description: Learn how to integrate the pxp library into your Rust applications, implement progress traits, and drive transfer streams.
+---
+
+# Library Usage Guide
+
+To use the `pxp` library, add it to your `Cargo.toml` dependencies. In the workspace, you can reference it directly:
+
+```toml
+[dependencies]
+pxp.workspace = true
+```
+
+---
+
+## 1. Implementing Core Traits
+
+Before calling the sender or receiver APIs, you must implement the callbacks used for drawing progress interfaces and resolving filename conflicts.
+
+### Progress Reporting
+The library uses `TransferProgress` for general transfer stages and `ItemProgress` to wrap individual read/write streams without chunking.
+
+```rust
+use pxp::{ItemProgress, TransferProgress};
+use tokio::io::{AsyncRead, AsyncWrite};
+
+// Wrap individual file/directory progress indicators
+pub struct CustomItemProgress;
+
+impl ItemProgress for CustomItemProgress {
+    fn wrap_read(
+        &self,
+        reader: Box<dyn AsyncRead + Unpin + Send>,
+    ) -> Box<dyn AsyncRead + Unpin + Send> {
+        // Wrap reader and increment byte counts here
+        reader
+    }
+
+    fn wrap_write(
+        &self,
+        writer: Box<dyn AsyncWrite + Unpin + Send>,
+    ) -> Box<dyn AsyncWrite + Unpin + Send> {
+        // Wrap writer and increment byte counts here
+        writer
+    }
+
+    fn finish_and_clear(&self) {
+        // Hide file-specific progress bars
+    }
+}
+
+// Drive overall transfer stages
+pub struct CustomTransferProgress;
+
+impl TransferProgress for CustomTransferProgress {
+    fn set_total_items(&self, total: usize) {
+        println!("Expecting {} total top-level items...", total);
+    }
+
+    fn set_current_item(&self, current: usize, total: usize) {
+        println!("Transferring item {} of {}...", current, total);
+    }
+
+    fn create_item_progress(&self, name: &str, total_bytes: u64) -> Box<dyn ItemProgress> {
+        println!("Starting item '{}' ({} bytes)", name, total_bytes);
+        Box::new(CustomItemProgress)
+    }
+
+    fn println(&self, msg: &str) {
+        println!("{}", msg);
+    }
+}
+```
+
+### Conflict Resolution
+When writing files to disk, name collisions are intercepted. The receiver queries your implementation of `ConflictResolver` to decide what strategy to use.
+
+```rust
+use pxp::{ConflictAction, ConflictResolver, PxpError};
+
+pub struct CustomConflictResolver;
+
+impl ConflictResolver for CustomConflictResolver {
+    fn resolve(&self, item_name: &str) -> Result<ConflictAction, PxpError> {
+        // In a CLI, prompt the user. In a GUI, pop a modal.
+        // Return ConflictAction choice.
+        Ok(ConflictAction::Overwrite)
+    }
+}
+```
+
+---
+
+## 2. Running a Sender Session
+
+The sender sequence consists of finding the receiver, connecting, generating the transfer manifest, and initiating the stream.
+
+```rust
+use pxp::sender::{discover_receiver, connect_to_receiver, create_global_transfer_manifest, send_manifest, send_stream};
+use std::path::PathBuf;
+
+async fn run_sender(files: Vec<PathBuf>, username: &str) -> Result<(), pxp::PxpError> {
+    // 1. Discover receiver using UDP beacons
+    let (ip, node_id, port) = discover_receiver(username, 7878).await?;
+
+    // 2. Connect over TCP and verify receiver's identity proof
+    let mut stream = connect_to_receiver(&ip, port, Some(&node_id)).await?;
+
+    // 3. Create transfer metadata summary
+    let manifest = create_global_transfer_manifest(
+        1,       // total files
+        0,       // total directories
+        1024,    // total bytes
+        None,    // optional description
+        Some(username.to_string()),
+        true,    // Gzip compressed
+    ).await?;
+
+    // 4. Send manifest first
+    send_manifest(&mut stream, &manifest).await?;
+
+    // 5. Stream items (optionally passing CustomTransferProgress)
+    let progress = CustomTransferProgress;
+    let items_to_send = vec![(files[0].clone(), pxp::metadata::TransferItem::File(...))];
+    send_stream(stream, items_to_send, false, Some(&progress)).await?;
+
+    Ok(())
+}
+```
+
+---
+
+## 3. Running a Receiver Session
+
+The receiver binds to a port, accepts the connection, receives the manifest, and processes the incoming data stream.
+
+```rust
+use pxp::receiver::{handshake::accept_and_read_manifest, stream::receive_stream};
+use std::path::PathBuf;
+
+async fn run_receiver(port: u16, username: String, target_dir: PathBuf) -> Result<(), pxp::PxpError> {
+    // 1. Start beacons, bind TCP, and accept connection
+    let handshake = accept_and_read_manifest(port, username).await?;
+    let socket = handshake.socket;
+    let manifest = handshake.manifest;
+
+    // 2. Process data stream and extract files to disk
+    let progress = CustomTransferProgress;
+    let resolver = CustomConflictResolver;
+    
+    let (stream_result, summary) = receive_stream(
+        socket,
+        manifest.compressed,
+        &target_dir,
+        manifest.total_files + manifest.total_directories,
+        Some(&progress),
+        Some(&resolver),
+    ).await;
+
+    stream_result?;
+    println!("Successfully received {} bytes!", summary.total_bytes);
+    Ok(())
+}
+```
