@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file, structured 
 ## [Unreleased]
 
 - **ci(release)**: Revert one-time workflow_dispatch trigger [[8b4e51f](https://github.com/Spectra010s/portal/commit/8b4e51f)]
+
+---
+
+## [v0.13.0] - 2026-08-16
+
 - **fix(npm)**: add repository.url for provenance validation [[fa75947](https://github.com/Spectra010s/portal/commit/fa75947)]
 - **ci(release)**: Ensure npm >= 11.5.1 for OIDC trusted publishing [[7456471](https://github.com/Spectra010s/portal/commit/7456471)]
 - **ci(release)**: Create GitHub release only after npm publishes [[ea19745](https://github.com/Spectra010s/portal/commit/ea19745)]
@@ -23,6 +28,7 @@ All notable changes to this project will be documented in this file, structured 
 - **docs(protocol)**: Add PXP protocol specification (#153) [[74834c0](https://github.com/Spectra010s/portal/commit/74834c0)]
 - **docs(library)**: Add pxp library overview and usage guide (#153) [[74834c0](https://github.com/Spectra010s/portal/commit/74834c0)]
 - **build(deps)**: Bump web application and pnpm dependencies (#153) [[74834c0](https://github.com/Spectra010s/portal/commit/74834c0)]
+- **refactor(pxp)**: Split PXP protocol library from Portal CLI (#151) [[e2b0b85](https://github.com/Spectra010s/portal/commit/e2b0b85)]
 - **build(deps)**: bump quinn-proto from 0.11.14 to 0.11.16 (#150) [[8482da3](https://github.com/Spectra010s/portal/commit/8482da3)]
 - **docs(changelog)**: manually add missing entries for PR 143 and 145 [[c181dd9](https://github.com/Spectra010s/portal/commit/c181dd9)]
 - **fix(ci)**: grant workflow write permissions and add self-healing hash detection (#146) [[c37ffc8](https://github.com/Spectra010s/portal/commit/c37ffc8)]

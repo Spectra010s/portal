@@ -58,7 +58,7 @@ export default function Footer() {
               Release
             </p>
             <p className="text-sm font-mono font-medium text-slate-600 dark:text-slate-400">
-              v0.12.0
+              v0.13.0
             </p>
           </div>
         </div>
