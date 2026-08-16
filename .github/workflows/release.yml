@@ -2,6 +2,7 @@ name: Release
 
 permissions:
   contents: write
+  id-token: write
 
 on:
   push:
@@ -403,7 +404,9 @@ jobs:
   publish-npm:
     needs:
       - prepare
-      - release
+      - build-unix
+      - build-android
+      - build-windows
     if: ${{ needs.prepare.outputs.publishing == 'true' }}
     runs-on: ubuntu-22.04
     env:
@@ -416,7 +419,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: "20.x"
+          node-version: "22.x"
           registry-url: "https://registry.npmjs.org"
 
       - uses: actions/download-artifact@v7
@@ -425,12 +428,12 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Build npm package
+      - name: Assemble npm package
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="${TAG#v}"
-          PKG_DIR="npm_pkg"
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' portal-cli/Cargo.toml | head -n 1)
+          PKG_DIR="npm"
           BIN_DIR="$PKG_DIR/bin"
 
           mkdir -p "$BIN_DIR"
@@ -453,68 +456,12 @@ jobs:
           unzip -q -j "hiverra-portal-$target.zip" "*.exe" -d "../$BIN_DIR/$target"
           cd ..
 
-          cat > "$BIN_DIR/portal.js" <<'SCRIPT'
-          #!/usr/bin/env node
-          const { spawn } = require("node:child_process");
-          const path = require("node:path");
-          const fs = require("node:fs");
-
-          const override = process.env.PORTAL_NPM_TARGET;
-          const platform = process.platform;
-          const arch = process.arch;
-
-          let target = override;
-          if (!target) {
-            if (platform === "win32" && arch === "x64") target = "x86_64-pc-windows-msvc";
-            else if (platform === "darwin" && arch === "arm64") target = "aarch64-apple-darwin";
-            else if (platform === "darwin" && arch === "x64") target = "x86_64-apple-darwin";
-            else if (platform === "android" && arch === "arm64") target = "aarch64-linux-android";
-            else if (platform === "linux" && arch === "arm64") target = "aarch64-unknown-linux-gnu";
-            else if (platform === "linux" && arch === "x64") target = "x86_64-unknown-linux-gnu";
-          }
-
-          if (!target) {
-            console.error("Unsupported platform:", platform, arch);
-            process.exit(1);
-          }
-
-          const binName = platform === "win32" ? "portal.exe" : "portal";
-          const binPath = path.join(__dirname, target, binName);
-
-          if (!fs.existsSync(binPath)) {
-            console.error("Binary not found for target:", target);
-            process.exit(1);
-          }
-
-          const child = spawn(binPath, process.argv.slice(2), { stdio: "inherit" });
-          child.on("exit", (code) => process.exit(code ?? 0));
-          SCRIPT
-          chmod +x "$BIN_DIR/portal.js"
-
-          cat > "$PKG_DIR/package.json" <<SCRIPT
-          {
-            "name": "@hiverra/portal",
-            "version": "$VERSION",
-            "description": "Hiverra Portal CLI",
-            "license": "MIT",
-            "bin": {
-              "portal": "bin/portal.js"
-            },
-            "files": [
-              "bin/**",
-              "README.md",
-              "LICENSE"
-            ]
-          }
-          SCRIPT
-
           cp README.md "$PKG_DIR/README.md"
           cp LICENSE "$PKG_DIR/LICENSE"
+          npm --prefix "$PKG_DIR" pkg set version="$VERSION"
 
       - name: Publish npm package
         shell: bash
         run: |
-          cd npm_pkg
-          npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          cd npm
+          npm publish --provenance --access public
