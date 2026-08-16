@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file, structured 
 
 ## [Unreleased]
 
+- **docs(release)**: bump v0.12.0 references to v0.13.0 and cut changelog [[06b74b4](https://github.com/Spectra010s/portal/commit/06b74b4)]
 - **ci(release)**: Revert one-time workflow_dispatch trigger [[8b4e51f](https://github.com/Spectra010s/portal/commit/8b4e51f)]
 
 ---
