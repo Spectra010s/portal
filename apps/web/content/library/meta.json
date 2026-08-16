@@ -1,5 +1,6 @@
 {
   "title": "pxp Library",
+  "icon": "Library",
   "root": true,
   "pages": [
     "index",

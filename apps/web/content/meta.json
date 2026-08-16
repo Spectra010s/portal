@@ -1,6 +1,6 @@
 {
   "pages": [
-    "cli",
+    "(cli)",
     "protocol",
     "library"
   ]
