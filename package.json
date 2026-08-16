@@ -1,6 +1,6 @@
 {
   "name": "portal",
-  "packageManager": "pnpm@11.13.0",
+  "packageManager": "pnpm@11.18.0",
   "private": true,
   "scripts": {
     "web:build": "pnpm --filter @hiverra/portal-web build",
