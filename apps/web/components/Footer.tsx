@@ -34,8 +34,9 @@ export default function Footer() {
               Architect
             </p>
             <a
-              href="https://github.com/Spectra010s"
+              href="https://spectra010s.biuld.app?utm_source=portal&utm_medium=website&utm_campaign=footer"
               target="_blank"
+              rel="noopener noreferrer"
               className="text-sm font-medium text-foreground transition hover:text-primary"
             >
               @Spectra010s
