@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file, structured 
 
 ## [Unreleased]
 
+- **build(deps)**: bump quinn-proto from 0.11.14 to 0.11.16 (#150) [[8482da3](https://github.com/Spectra010s/portal/commit/8482da3)]
 - **docs(changelog)**: manually add missing entries for PR 143 and 145 [[c181dd9](https://github.com/Spectra010s/portal/commit/c181dd9)]
 - **fix(ci)**: grant workflow write permissions and add self-healing hash detection (#146) [[c37ffc8](https://github.com/Spectra010s/portal/commit/c37ffc8)]
 - **fix(ci)**: make changelog updater resilient to Gemini API spikes and resolve PRs (#145) [[07f4872](https://github.com/Spectra010s/portal/commit/07f4872)]
