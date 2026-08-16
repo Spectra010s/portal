@@ -12,6 +12,10 @@
     "hiverra"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Spectra010s/portal"
+  },
   "bin": {
     "portal": "bin/portal.js"
   },
