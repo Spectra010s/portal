@@ -8,7 +8,6 @@ on:
   push:
     tags:
       - '**[0-9]+.[0-9]+.[0-9]+*'
-  workflow_dispatch:
 
 jobs:
   prepare:
@@ -32,9 +31,6 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             tag="v$cargo_version"
             publishing=false
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            tag="v$cargo_version"
-            publishing=true
           else
             publishing=true
             tag_version="${tag#v}"
