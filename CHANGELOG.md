@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file, structured 
 
 ## [Unreleased]
 
+- **ci(release)**: Migrate npm publishing to OIDC and a local package dir (#159) [[7880784](https://github.com/Spectra010s/portal/commit/7880784)]
 - **fix(release)**: correct license RTF path after wix moved into portal-cli [[fc8ffdc](https://github.com/Spectra010s/portal/commit/fc8ffdc)]
 - **docs(web)**: Point footer architect link to portfolio with UTM (#157) [[2bcf52b](https://github.com/Spectra010s/portal/commit/2bcf52b)]
 - **fix(release)**: resolve Windows MSI build after workspace restructure (#156) [[cee59f0](https://github.com/Spectra010s/portal/commit/cee59f0)]
