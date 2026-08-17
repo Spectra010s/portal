@@ -7,12 +7,12 @@ use {
     bincode::deserialize,
     std::path::PathBuf,
     tokio::{
-        fs::{File, create_dir_all, remove_dir_all, remove_file, rename, try_exists},
+        fs::{File, create_dir_all, remove_dir, remove_dir_all, remove_file, rename, try_exists},
         io::AsyncRead,
     },
     tokio_stream::StreamExt,
     tokio_tar::Archive,
-    tracing::{debug, error, info, trace, warn},
+    tracing::{debug, error, info, trace},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -23,20 +23,44 @@ enum ConflictStrategy {
     SkipAll,
 }
 
-/// Receives items from the tar archive, validates metadata, and writes to disk.
+/// One top-level item sitting in the staging dir, waiting to be moved into place. We track
+/// both the staged path and the final path because the actual rename only happens at
+/// reconcile time — the stream itself never touches the real destination.
+#[derive(Debug)]
+pub struct StagedItem {
+    pub name: String,
+    pub staged_path: PathBuf,
+    pub final_path: PathBuf,
+    pub is_dir: bool,
+}
+
+/// What the receiver ends up with after streaming: every item unpacked into a private
+/// staging dir, ready for one consolidated reconcile pass. We keep this around even when
+/// the stream dies part-way, so a partial transfer can still be salvaged instead of lost.
+#[derive(Debug)]
+pub struct StagedTransfer {
+    pub items: Vec<StagedItem>,
+    pub staging_dir: PathBuf,
+    pub target_dir: PathBuf,
+}
+
+/// Receives items from the tar archive, validates metadata, and writes them into a private
+/// staging dir (so conflicts never interrupt the stream). Appends each completed top-level
+/// item to `staged_items`, which the caller can reconcile into the target dir even when the
+/// stream fails part-way through.
 pub async fn receive_item<R>(
     archive: &mut Archive<R>,
     target_dir: &PathBuf,
+    staging_dir: &PathBuf,
     total_items: u32,
     progress: Option<&dyn TransferProgress>,
-    conflict_resolver: Option<&dyn ConflictResolver>,
     summary: &mut ReceiveSummary,
+    staged_items: &mut Vec<StagedItem>,
 ) -> Result<()>
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
     let mut contract: Option<PxpMeta> = None;
-    let mut global_strategy = ConflictStrategy::Prompt;
     let mut items_processed: u32 = 0;
     let mut active_dir_progress: Option<Box<dyn crate::ItemProgress>> = None;
     let mut pending_dir_success: Option<String> = None;
@@ -161,8 +185,6 @@ where
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "unknown".into());
 
-        let temp_path = target_dir.join(format!(".tmp_{}_portal", item_name));
-
         // We clean and validate the incoming path by stripping out any weird components 
         // (like `..` or absolute path roots). This is a crucial security measure to prevent 
         // "Zip Slip" style attacks where a malicious sender tries to write outside the target dir.
@@ -170,79 +192,24 @@ where
             .components()
             .filter(|c| matches!(c, std::path::Component::Normal(_)))
             .collect::<PathBuf>();
-        let mut final_path = target_dir.join(safe_path);
+        let staged_path = staging_dir.join(&safe_path);
+        let final_path = target_dir.join(safe_path);
+        let is_top_level = matches!(&meta, PxpMeta::Item(_));
         trace!(
-            "Resolved extraction paths: temp={:?}, final={:?}",
-            temp_path, final_path
+            "Resolved extraction paths: staged={:?}, final={:?}",
+            staged_path, final_path
         );
 
-        // pre-check existence
-        let final_exists = try_exists(&final_path).await?;
-        let temp_exists = try_exists(&temp_path).await?;
-
-        // handle conflict
-        // If the file already exists on disk, we have a collision. Rather than blindly overwriting,
-        // we intercept it and ask the resolver (which might prompt the user). 
-        // We cache global strategies like OverwriteAll, RenameAll, or SkipAll so we don't have to 
-        // keep bugging the user for every single file in a massive directory.
-        if final_exists && global_strategy != ConflictStrategy::OverwriteAll {
-            warn!("Conflict detected for path: {:?}", final_path);
-            if global_strategy == ConflictStrategy::SkipAll {
-                debug!("Strategy SkipAll: skipping {:?}", item_name);
-                continue;
-            } else if global_strategy == ConflictStrategy::RenameAll {
-                final_path = get_unused_path(final_path).await;
-                debug!("Strategy RenameAll: new path {:?}", final_path);
-            } else if let Some(resolver) = conflict_resolver {
-                let action = resolver.resolve(&item_name)?;
-                trace!("Conflict resolver returned: {:?}", action);
-
-                match action {
-                    ConflictAction::Overwrite => info!("Chose to overwrite {:?}", item_name),
-                    ConflictAction::OverwriteAll => {
-                        info!("Enabled Overwrite All strategy");
-                        global_strategy = ConflictStrategy::OverwriteAll;
-                    }
-                    ConflictAction::Rename => {
-                        final_path = get_unused_path(final_path).await;
-                        info!("Chose to rename to {:?}", final_path);
-                    }
-                    ConflictAction::RenameAll => {
-                        info!("Enabled Rename All strategy");
-                        global_strategy = ConflictStrategy::RenameAll;
-                        final_path = get_unused_path(final_path).await;
-                    }
-                    ConflictAction::Skip => {
-                        info!("Skipped item {:?}", item_name);
-                        continue;
-                    }
-                    ConflictAction::SkipAll => {
-                        info!("Enabled Skip All strategy");
-                        global_strategy = ConflictStrategy::SkipAll;
-                        continue;
-                    }
-                }
-            } else {
-                // No conflict resolver provided, default to overwrite
-                info!("No conflict resolver: defaulting to overwrite {:?}", item_name);
-            }
-        }
-
-        // prepare temp folder
-        trace!("Cleaning/Creating temp directory: {:?}", temp_path);
-        if temp_exists {
-            let _ = remove_dir_all(&temp_path).await;
-        }
-        create_dir_all(&temp_path).await?;
-
+        // Unpack into the private staging dir. Nothing can collide inside a fresh staging
+        // dir, so no prompts interrupt the progress UI. Conflicts are resolved afterwards
+        // by `reconcile` once the stream has fully completed. The whole staging dir is the
+        // temp area now — no more per-item `.tmp_*_portal` dance.
         if !is_dir {
-            trace!(
-                "Unpacking file to temp storage: {}/{}",
-                temp_path.display(),
-                item_name
-            );
-            let file_in_temp = temp_path.join(&item_name);
-            let outfile = File::create(&file_in_temp).await?;
+            trace!("Unpacking file to staging: {}", staged_path.display());
+            if let Some(parent) = staged_path.parent() {
+                create_dir_all(parent).await?;
+            }
+            let outfile = File::create(&staged_path).await?;
 
             if let Some(prog) = entry_item_progress.take() {
                 let mut writer = prog.wrap_write(Box::new(outfile));
@@ -256,28 +223,23 @@ where
                 let mut outfile = outfile;
                 tokio::io::copy(&mut entry, &mut outfile).await?;
             }
+        } else {
+            trace!("Creating staging directory: {}", staged_path.display());
+            create_dir_all(&staged_path).await?;
         }
 
-        // move to final location
-        trace!("Moving from temp to final destination: {:?}", final_path);
-        if let Some(parent) = final_path.parent() {
-            create_dir_all(parent).await?;
+        // Only top-level items get recorded. Nested files ride along inside their parent
+        // folder's staged dir, so conflict resolution happens once per folder — we treat a
+        // whole folder as one unit instead of prompting for every single file in it.
+        if is_top_level {
+            staged_items.push(StagedItem {
+                name: item_name.clone(),
+                staged_path: staged_path.clone(),
+                final_path,
+                is_dir,
+            });
+            debug!("Item staged at {:?}", staged_path);
         }
-        if !is_dir {
-            if final_exists {
-                trace!("Overwriting existing file at {:?}", final_path);
-                let _ = remove_file(&final_path).await;
-            }
-            rename(temp_path.join(item_name), &final_path).await?;
-            let _ = remove_dir_all(&temp_path).await;
-        } else {
-            if final_exists {
-                trace!("Overwriting existing directory at {:?}", final_path);
-                let _ = remove_dir_all(&final_path).await;
-            }
-            rename(&temp_path, &final_path).await?;
-        }
-        debug!("Item finalized at target path: {:?}", final_path);
 
         // validate metadata
         match meta {
@@ -373,6 +335,129 @@ where
         )));
     }
     info!("All {} items received and verified.", items_processed);
+    Ok(())
+}
+
+/// Moves staged items into the target dir, resolving any filename collisions now that the
+/// stream has fully completed — so conflict prompts never interrupt the progress UI.
+///
+/// Strategy memoization is shared across items: choosing "Overwrite All", "Rename All" or
+/// "Skip All" applies to every remaining item without prompting again.
+pub async fn reconcile(
+    staged: &StagedTransfer,
+    conflict_resolver: Option<&dyn ConflictResolver>,
+) -> Result<()> {
+    let mut global_strategy = ConflictStrategy::Prompt;
+
+    for item in &staged.items {
+        let final_exists = try_exists(&item.final_path).await?;
+        let mut final_path = item.final_path.clone();
+
+        if final_exists && global_strategy != ConflictStrategy::OverwriteAll {
+            match global_strategy {
+                ConflictStrategy::SkipAll => {
+                    debug!("Strategy SkipAll: skipping {:?}", item.name);
+                    remove_staged_item(item).await?;
+                    continue;
+                }
+                ConflictStrategy::RenameAll => {
+                    final_path = get_unused_path(final_path).await;
+                    debug!("Strategy RenameAll: new path {:?}", final_path);
+                }
+                _ => {
+                    if let Some(resolver) = conflict_resolver {
+                        let action = resolver.resolve(&item.name)?;
+                        trace!("Conflict resolver returned: {:?}", action);
+
+                        match action {
+                            ConflictAction::Overwrite => {
+                                info!("Chose to overwrite {:?}", item.name)
+                            }
+                            ConflictAction::OverwriteAll => {
+                                info!("Enabled Overwrite All strategy");
+                                global_strategy = ConflictStrategy::OverwriteAll;
+                            }
+                            ConflictAction::Rename => {
+                                final_path = get_unused_path(final_path).await;
+                                info!("Chose to rename to {:?}", final_path);
+                            }
+                            ConflictAction::RenameAll => {
+                                info!("Enabled Rename All strategy");
+                                global_strategy = ConflictStrategy::RenameAll;
+                                final_path = get_unused_path(final_path).await;
+                            }
+                            ConflictAction::Skip => {
+                                info!("Skipped item {:?}", item.name);
+                                remove_staged_item(item).await?;
+                                continue;
+                            }
+                            ConflictAction::SkipAll => {
+                                info!("Enabled Skip All strategy");
+                                global_strategy = ConflictStrategy::SkipAll;
+                                remove_staged_item(item).await?;
+                                continue;
+                            }
+                        }
+                    } else {
+                        // No conflict resolver provided, default to overwrite
+                        info!(
+                            "No conflict resolver: defaulting to overwrite {:?}",
+                            item.name
+                        );
+                    }
+                }
+            }
+        }
+
+        // Move the staged item into its final location. Staging lives inside the target
+        // dir, so this is always a same-filesystem rename (fast even on external drives).
+        if let Some(parent) = final_path.parent() {
+            create_dir_all(parent).await?;
+        }
+        if !item.is_dir {
+            if try_exists(&final_path).await? {
+                trace!("Overwriting existing file at {:?}", final_path);
+                let _ = remove_file(&final_path).await;
+            }
+            rename(&item.staged_path, &final_path).await?;
+        } else {
+            if try_exists(&final_path).await? {
+                trace!("Overwriting existing directory at {:?}", final_path);
+                let _ = remove_dir_all(&final_path).await;
+            }
+            rename(&item.staged_path, &final_path).await?;
+        }
+        debug!("Item reconciled at target path: {:?}", final_path);
+    }
+
+    // Clean up the staging root now that every item has been moved or skipped,
+    // then prune the now-empty `.portal/stage` and `.portal` parents.
+    // Remove only the (now-empty) parents. We deliberately use empty-only `remove_dir`
+    // rather than `remove_dir_all`: a concurrent transfer could still be staging into its
+    // own subdir, and we don't want to nuke a sibling's in-progress work.
+    let _ = remove_dir_all(&staged.staging_dir).await;
+    if let Some(stage) = staged.staging_dir.parent() {
+        let _ = remove_dir(stage).await;
+        if let Some(portal) = stage.parent() {
+            let _ = remove_dir(portal).await;
+        }
+    }
+    info!(
+        "Reconcile complete: {} item(s) moved into '{}'",
+        staged.items.len(),
+        staged.target_dir.display()
+    );
+    Ok(())
+}
+
+/// Deletes a skipped item from staging so it doesn't linger and get mistaken for a
+/// completed file later (and so the final staging-dir cleanup stays trivial).
+async fn remove_staged_item(item: &StagedItem) -> Result<()> {
+    if item.is_dir {
+        let _ = remove_dir_all(&item.staged_path).await;
+    } else {
+        let _ = remove_file(&item.staged_path).await;
+    }
     Ok(())
 }
 

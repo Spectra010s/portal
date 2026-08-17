@@ -176,17 +176,35 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
         prog.set_total_items(total_items as usize);
         trace!("Progress UI initialized with total_items={}", total_items);
 
-        let conflict_resolver = CliConflictResolver;
-        let (stream_result, summary) = pxp::receiver::stream::receive_stream(
+        let (stream_result, staged, summary) = pxp::receiver::stream::receive_stream(
             socket,
             compressed,
             &target_dir,
             total_items,
             Some(&prog as &dyn pxp::TransferProgress),
-            Some(&conflict_resolver as &dyn ConflictResolver),
         )
         .await;
+        // Stop the progress UI before any conflict prompts so the terminal stays clean.
+        prog.finish();
+
+        // Resolve any filename collisions now that the stream is done. This runs on success
+        // AND on a cut connection, so whatever was already staged still lands in the target
+        // dir (same crash-safety as the old per-item finalize behavior).
+        let conflict_resolver = CliConflictResolver;
+        if let Err(e) =
+            pxp::receiver::receive_item::reconcile(&staged, Some(&conflict_resolver as &dyn ConflictResolver))
+                .await
+        {
+            partial_summary = Some(summary);
+            return Err(e.into());
+        }
+
         if let Err(e) = stream_result {
+            println!(
+                "Portal: Transfer interrupted; recovered {} item(s) to '{}'",
+                staged.items.len(),
+                target_dir.display()
+            );
             partial_summary = Some(summary);
             return Err(e.into());
         }
@@ -195,10 +213,10 @@ pub async fn start_receiver(port: Option<u16>, dir: &Option<PathBuf>) -> Result<
             "SUCCESS: Transfer completed. Saved to {}",
             target_dir.display()
         );
-        prog.println(format!(
+        println!(
             "Portal: All item(s) have been received successfully! Saved to '{}'",
             target_dir.display()
-        ));
+        );
 
         // Convert core summary items to CLI history items
         let history_items: Vec<HistoryItem> = summary

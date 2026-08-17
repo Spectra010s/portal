@@ -87,6 +87,13 @@ impl ProgressManager {
     pub fn println<S: AsRef<str>>(&self, msg: S) {
         let _ = self.mp.println(msg);
     }
+
+    /// Stops and clears the progress UI. Called once the stream completes, before any
+    /// conflict prompts or final status output, so the terminal stays clean.
+    pub fn finish(&self) {
+        self.top.finish_and_clear();
+        let _ = self.mp.clear();
+    }
 }
 
 pub fn stream_download_with_spinner<R: Read, W: Write>(
