@@ -1,0 +1,31 @@
+---
+title: Staging & Conflict Resolution
+description: How incoming transfers are staged before being moved into place, and how filename conflicts are resolved after the transfer completes.
+openGraph:
+  title: Portal CLI — Staging & Conflict Resolution
+  description: Learn how Portal stages incoming transfers and resolves filename conflicts.
+twitter:
+  title: Portal CLI — Staging & Conflict Resolution
+  description: Learn how Portal stages incoming transfers and resolves filename conflicts.
+---
+
+# Staging & Conflict Resolution
+
+When a transfer arrives, the receiver unpacks everything into a **staging area** at `.portal/stage/<nanos>` inside the target directory, and only moves items into their final location after the stream has fully completed. Two practical effects:
+
+- the progress bar stays clean — conflict prompts never interrupt the transfer
+- the final destination is untouched until the whole transfer has arrived
+
+## Conflict resolution
+
+Filename collisions (an item already exists at the target path) are resolved **after** the transfer, in one consolidated pass. The prompt applies per top-level item — a whole folder is treated as one unit instead of prompting for every file inside it:
+
+- **Overwrite** / **Overwrite All**
+- **Rename** / **Rename All** (writes e.g. `file (1).txt`)
+- **Skip** / **Skip All**
+
+## Interrupted transfers
+
+If the connection drops part-way, the items that had already finished streaming are still moved into the target directory — the receiver prints `Transfer interrupted; recovered N item(s)`. Only the file that was mid-transfer at the moment of the cut is lost.
+
+Staging leftovers from a hard crash (for example the app is killed mid-reconcile) are swept automatically on the next receive once they are older than 24 hours.
