@@ -56,7 +56,7 @@ export default function Home() {
               className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary"
             >
               <span className="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse" />
-              v0.13.0 is live
+              v0.14.0 is live
             </motion.p>
 
             <motion.h1

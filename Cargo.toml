@@ -3,7 +3,7 @@ members = ["pxp", "portal-cli"]
 resolver = "3"
 
 [workspace.dependencies]
-pxp = { path = "pxp", version = "0.1.0" }
+pxp = { path = "pxp", version = "0.2.0" }
 serde = { version = "1.0.228", features = ["derive"] }
 bincode = "1.3.3"
 tokio = { version = "1.49.0", features = ["full"] }
