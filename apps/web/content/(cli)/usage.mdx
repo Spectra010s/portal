@@ -119,6 +119,8 @@ If you do **not** pass `--dir`, the receiver resolves the target directory in th
 
 That means receive can still work even when your storage config is incomplete, but it will become interactive.
 
+Incoming transfers are staged before being moved into place, and filename conflicts are resolved after the transfer. See [Staging & Conflict Resolution](/docs/staging-conflicts) for how that works.
+
 ## History is part of the workflow, not an afterthought
 
 Portal keeps transfer history locally in `~/.portal/history.jsonl`, and the records are more detailed than the old docs implied.
