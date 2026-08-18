@@ -9,7 +9,7 @@ To use the `pxp` library, add it to your `Cargo.toml` dependencies, pinning the 
 
 ```toml
 [dependencies]
-pxp = { version = "0.1.0" }
+pxp = { version = "0.2.0" }
 ```
 
 ---
@@ -74,7 +74,7 @@ impl TransferProgress for CustomTransferProgress {
 ```
 
 ### Conflict Resolution
-When writing files to disk, name collisions are intercepted. The receiver queries your implementation of `ConflictResolver` to decide what strategy to use.
+Incoming items are unpacked into a staging dir first, so name collisions are **not** checked while the stream is running. Once the stream has completed, you call `reconcile` with your implementation of `ConflictResolver`; it walks the staged items and resolves any collision against the target path before moving the item into place.
 
 ```rust
 use pxp::{ConflictAction, ConflictResolver, PxpError};
@@ -89,6 +89,8 @@ impl ConflictResolver for CustomConflictResolver {
     }
 }
 ```
+
+Global strategies (`Overwrite All`, `Rename All`, `Skip All`) are remembered by `reconcile` and applied to every remaining conflict, so your resolver is only called once per distinct item.
 
 ---
 
@@ -133,10 +135,10 @@ async fn run_sender(files: Vec<PathBuf>, username: &str) -> Result<(), pxp::PxpE
 
 ## 3. Running a Receiver Session
 
-The receiver binds to a port, accepts the connection, receives the manifest, and processes the incoming data stream.
+The receiver binds to a port, accepts the connection, receives the manifest, stages the incoming data stream, and then reconciles the staged items into the target directory.
 
 ```rust
-use pxp::receiver::{handshake::accept_and_read_manifest, stream::receive_stream};
+use pxp::receiver::{handshake::accept_and_read_manifest, stream::receive_stream, reconcile};
 use std::path::PathBuf;
 
 async fn run_receiver(port: u16, username: String, target_dir: PathBuf) -> Result<(), pxp::PxpError> {
@@ -145,21 +147,25 @@ async fn run_receiver(port: u16, username: String, target_dir: PathBuf) -> Resul
     let socket = handshake.socket;
     let manifest = handshake.manifest;
 
-    // 2. Process data stream and extract files to disk
+    // 2. Process the data stream into a staging dir inside `target_dir`
     let progress = CustomTransferProgress;
-    let resolver = CustomConflictResolver;
-    
-    let (stream_result, summary) = receive_stream(
+
+    let (stream_result, staged, summary) = receive_stream(
         socket,
         manifest.compressed,
         &target_dir,
         manifest.total_files + manifest.total_directories,
         Some(&progress),
-        Some(&resolver),
     ).await;
+
+    // 3. Move staged items into place, resolving any filename conflicts
+    let resolver = CustomConflictResolver;
+    reconcile(&staged, Some(&resolver)).await?;
 
     stream_result?;
     println!("Successfully received {} bytes!", summary.total_bytes);
     Ok(())
 }
 ```
+
+The staged items are returned even when the stream failed part-way, so `reconcile` can still salvage whatever was already received before you report the error.

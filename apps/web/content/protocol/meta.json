@@ -7,6 +7,7 @@
     "discovery",
     "handshake",
     "manifest",
-    "streaming"
+    "streaming",
+    "streaming-01"
   ]
 }
