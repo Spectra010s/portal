@@ -4,9 +4,6 @@ All notable changes to this project will be documented in this file, structured 
 
 ## [Unreleased]
 
-- **docs(release)**: Bump v0.13.0 references to v0.14.0 and cut changelog (#161) [[aa36dd1](https://github.com/Spectra010s/portal/commit/aa36dd1)]
-- **docs**: Document staged receive, post-transfer conflicts, and draft streaming-01 (#161) [[7a17927](https://github.com/Spectra010s/portal/commit/7a17927)]
-- **feat(cli)**: Stage received files and resolve conflicts after transfer (#161) [[7bfa787](https://github.com/Spectra010s/portal/commit/7bfa787)]
 ---
 
 ## [v0.14.0] - 2026-08-17
