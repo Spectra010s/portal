@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file, structured 
 
 ## [Unreleased]
 
+- **docs(release)**: Finalize v0.14.0 changelog after merge [[449cbd6](https://github.com/Spectra010s/portal/commit/449cbd6)]
 ---
 
 ## [v0.14.0] - 2026-08-17
