@@ -1,0 +1,202 @@
+# PXP-STREAMING — Data Streaming
+
+**Parent:** [PXP](draft-pxp-overview-00.md)  
+**Transport:** TCP  
+**Phase:** 4 of 4  
+**Version:** 01  
+**Status:** Draft Specification  
+**Obsoletes:** [draft-pxp-streaming-00](draft-pxp-streaming-00.md)
+
+---
+
+## 1. Purpose
+
+After the manifest has been delivered, the sender streams all file and directory data to the receiver over the same TCP connection. PXP-STREAMING defines how items are packaged, how metadata is communicated inline, and how the stream is terminated.
+
+---
+
+## 2. Transport Format
+
+All items are streamed as a single **TAR archive**. The TAR format is used because it supports streaming (no random access required), preserves file names and directory structures, and is universally understood.
+
+### 2.1 Compression
+
+If the manifest field `compressed` is `true`:
+
+```
+TCP Socket → Gzip Frame → TAR Archive → Entries
+```
+
+The entire TAR stream is wrapped in a single Gzip frame. The receiver MUST decompress the stream before parsing TAR entries.
+
+If `compressed` is `false`:
+
+```
+TCP Socket → TAR Archive → Entries
+```
+
+The TAR archive is written directly to the TCP stream with no compression.
+
+The compression decision is made once per transfer and applies to the entire stream. Per-item compression is not supported.
+
+---
+
+## 3. Metadata Contracts
+
+PXP extends the plain TAR format with **metadata contracts** — virtual TAR entries that describe the next real entry. This allows the receiver to know what is coming (file name, size, whether it's a directory) before it arrives.
+
+### 3.1 Contract Entry
+
+A metadata contract is a TAR entry with:
+
+- **Path:** `.portal.meta`
+- **Content:** Bincode-serialized metadata structure
+
+The contract entry MUST appear immediately before the data entry it describes. The receiver MUST NOT write `.portal.meta` to disk.
+
+### 3.2 Contract Schema
+
+The metadata payload is one of:
+
+**For top-level items (files and directories):**
+```
+PxpMeta::Item(TransferItem)
+
+TransferItem = File { filename: string, file_size: u64 }
+             | Directory { dirname: string, total_size: u64 }
+```
+
+**For files nested inside a directory:**
+```
+PxpMeta::NestedFile(FileMetadata { filename: string, file_size: u64 })
+```
+
+### 3.3 Serialization
+
+Metadata contracts MUST be serialized using Bincode (same configuration as the manifest).
+
+---
+
+## 4. Entry Sequence
+
+### 4.1 Top-Level File
+
+```
+[ .portal.meta (Item::File) ] → [ actual-file-data ]
+```
+
+The metadata contract contains the file name and expected size. The next TAR entry contains the file content.
+
+### 4.2 Top-Level Directory
+
+```
+[ .portal.meta (Item::Directory) ] → [ dir-entry ] → [ nested files... ]
+```
+
+The metadata contract contains the directory name and total size. The next TAR entry is the directory itself. Subsequent entries are files within the directory, each preceded by a `PxpMeta::NestedFile` contract.
+
+### 4.3 Nested File (Within a Directory)
+
+```
+[ .portal.meta (NestedFile) ] → [ actual-file-data ]
+```
+
+Same pattern as a top-level file, but the metadata type is `NestedFile` instead of `Item::File`.
+
+---
+
+## 5. Receiver Validation
+
+The receiver MUST enforce the following invariants:
+
+### 5.1 Contract-First Rule
+
+Every data entry MUST be preceded by a `.portal.meta` contract. If a data entry arrives without a preceding contract, the receiver MUST treat this as a protocol error.
+
+### 5.2 Item Count Enforcement
+
+The total number of top-level `Item` contracts received MUST NOT exceed `total_files + total_directories` from the manifest. If more items arrive than declared, the receiver MUST treat this as a security violation and close the connection.
+
+### 5.3 Metadata Consistency
+
+For top-level files, the receiver SHOULD verify:
+- The actual TAR entry filename matches the filename in the contract.
+- The actual TAR entry size matches the `file_size` in the contract.
+
+Mismatches SHOULD be treated as protocol errors.
+
+---
+
+## 6. Conflict Resolution
+
+When the receiver is about to write a file or directory that already exists at the target path, it MUST resolve the conflict before proceeding. The resolution strategy is implementation-defined.
+
+The receiver MAY defer this resolution until after the data stream has completed — for example by staging incoming items first and moving them into place afterwards — as long as conflicts are still resolved before an item is written to its final target path.
+
+PXP defines the following standard conflict actions:
+
+| Action | Behavior |
+|---|---|
+| **Overwrite** | Replace the existing item with the incoming item. Applies to this item only. |
+| **Overwrite All** | Replace existing items for all remaining conflicts. |
+| **Rename** | Write the incoming item with a modified name (e.g. `file (1).txt`). Applies to this item only. |
+| **Rename All** | Rename for all remaining conflicts. |
+| **Skip** | Discard the incoming item. Applies to this item only. |
+| **Skip All** | Skip all remaining conflicts. |
+
+The mechanism for obtaining the user's choice (interactive prompt, config file, API callback) is outside the scope of this specification.
+
+---
+
+## 7. Stream Termination
+
+### 7.1 Normal Completion
+
+The sender signals completion by:
+
+1. Finalizing the TAR archive (writing the two 512-byte zero blocks that mark the end of a TAR stream).
+2. If compressed: shutting down the Gzip encoder (writing the Gzip footer).
+3. Flushing the TCP stream.
+4. Closing the TCP connection.
+
+The receiver detects completion when the TAR entry iterator returns no more entries.
+
+### 7.2 Abnormal Termination
+
+If either side drops the TCP connection before the stream is complete:
+
+- The **receiver** will encounter an unexpected EOF while reading TAR entries or decompressing Gzip data.
+- The **sender** will encounter a broken pipe or connection reset on the next write.
+
+There is no graceful cancellation mechanism. See [Limitations](#8-limitations).
+
+---
+
+## 8. Limitations
+
+### 8.1 No Acknowledgment
+
+The sender does not receive confirmation that the receiver successfully wrote all files. The sender considers the transfer complete after flushing the TCP stream.
+
+### 8.2 No Back-Channel
+
+The receiver has no way to send structured messages back to the sender during the data stream. If the receiver encounters an error (disk full, permission denied, conflict abort), its only option is to drop the TCP connection.
+
+### 8.3 No Cancellation
+
+Neither side can cleanly cancel a transfer in progress. Dropping the connection is the only mechanism, and it produces opaque errors on the other side.
+
+### 8.4 No Resumption
+
+If a transfer is interrupted, it cannot be resumed. The entire transfer must be restarted from the beginning. Items that had already been received are not lost: a conforming receiver may still move the staged items into the target directory before reporting the failure.
+
+> These limitations are acknowledged as areas for future protocol revision. See the [PXP TODO](../TODO.md) for planned improvements.
+
+---
+
+## Revision History
+
+| Version | Changes |
+|---|---|
+| **01** | Clarify that conflict resolution MAY be deferred until after the data stream completes. Clarify that already-received items are preserved when a transfer is interrupted. |
+| **00** | Initial draft. |

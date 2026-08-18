@@ -14,7 +14,7 @@ The `pxp` library is a headless, consumer-agnostic Rust implementation of the **
 1. **No Side Effects**
    The library never writes to stdout/stderr or reads from stdin. All logger outputs use the standard `tracing` facade.
 2. **Standard Traits for UI Decoupling**
-   All user-facing behaviors — such as displaying progress bars, printing transfer status messages, and prompting to resolve filename conflicts — are abstracted into traits that the caller implements.
+   All user-facing behaviors — such as displaying progress bars, printing transfer status messages, and resolving filename conflicts — are abstracted into traits that the caller implements.
 3. **Pure Async/Await**
    Built on top of `tokio` for non-blocking network I/O, UDP broadcasting, and filesystem streaming.
 4. **Strongly-Typed Errors**
@@ -28,6 +28,6 @@ The crate is organized into several modules representing protocol stages:
 
 * **`discovery`** — Broadcasts and listens for UDP beacons.
 * **`sender`** — Discovers receivers, establishes TCP handshakes, creates metadata manifests, and streams TAR archives.
-* **`receiver`** — Binds listeners, receives handshake proofs, decodes manifests, prompts for conflict actions, and extracts streams to disk.
+* **`receiver`** — Binds listeners, receives handshake proofs, decodes manifests, stages streams to disk, and reconciles conflicts into the target directory.
 * **`metadata`** — Shared models representing files, directories, manifests, and transfer items.
 * **`error`** — Crate-wide error enum (`PxpError`) and `Result` type alias.
