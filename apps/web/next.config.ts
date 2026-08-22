@@ -6,6 +6,7 @@ const withMDX = createMDX();
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  allowedDevOrigins: ["10.15.20.234"],
   images: {
     remotePatterns: [
       {

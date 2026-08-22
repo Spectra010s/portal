@@ -1,0 +1,46 @@
+---
+title: Introducing PXP, the application-layer protocol
+description: Portal v0.13 decouples the transfer engine into pxp — a headless Rust library any front-end can embed — and publishes formal RFC-style specs.
+author: Spectra010s
+date: 2026-08-16
+---
+
+Portal started as a single CLI that did everything: discovery, handshake, streaming, progress bars, prompts. It worked, but it couldn't be anything else — no GUI could reuse it, no daemon, no mobile.
+
+v0.13 fixes that.
+
+## Two crates
+
+- **`pxp` v0.1.0** — headless, consumer-agnostic Rust implementation of the Portal Transfer Protocol. No `println!`, no prompts, no filesystem config.
+- **`hiverra-portal` v0.13.0** — the `portal` CLI you already use, now a thin wrapper around `pxp`.
+
+Same binary, same commands. Different architecture underneath.
+
+## What pxp gives you
+
+As a library consumer you get traits, not assumptions:
+
+- **`PxpError`** (via `thiserror`) — typed errors you can match and recover from, not opaque `anyhow` strings.
+- **`TransferProgress` / `ItemProgress`** — implement your own progress: `indicatif` bars, GUI meters, logs, telemetry.
+- **`ConflictResolver`** — you decide overwrite / rename / skip. The CLI wires this to `inquire::Select`; your app wires it however you want.
+- **Zero-config discovery** — UDP multicast + broadcast beacons, built in.
+
+The CLI is just one implementation of these traits.
+
+## Protocol specs
+
+Rendered in [the docs](/docs) and as raw drafts on GitHub under [`/spec`](https://github.com/Spectra010s/portal/tree/main/spec):
+
+- [Overview](/docs/protocol/overview) — roles and architecture
+- [Discovery](/docs/protocol/discovery) — UDP beacon schema
+- [Handshake](/docs/protocol/handshake) — TCP session verification
+- [Manifest](/docs/protocol/manifest) — transfer metadata
+- [Streaming](/docs/protocol/streaming) — TAR payload, virtual metadata, conflicts
+
+## Shipping
+
+`@hiverra/portal` now publishes via **OIDC trusted publishing** from GitHub Actions (SLSA provenance, no long-lived tokens).
+
+---
+
+Release: [v0.13.0](https://github.com/Spectra010s/portal/releases/tag/v0.13.0) · Diff: [v0.12.0...v0.13.0](https://github.com/Spectra010s/portal/compare/v0.12.0...v0.13.0)
