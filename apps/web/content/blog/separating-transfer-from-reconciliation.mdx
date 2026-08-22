@@ -1,0 +1,126 @@
+---
+title: Separating file transfer from file reconciliation in PXP
+description: How Portal v0.14 stages every receive and reconciles afterward — so progress stays clean and cut connections can still be recovered.
+author: Spectra010s
+date: 2026-08-18
+---
+
+Portal had conflict resolution working, but then I realized it was interfering with something that should have been completely independent: **transfer progress**.
+
+The progress bar would tweak and dangle, overwritten by conflict prompts while bytes were still streaming from the sender.
+
+## What already existed
+
+Portal has had conflict resolution since v0.10.0.
+
+When receiving a file:
+
+```text
+sender → stream → temp → final directory
+```
+
+If the filename already exists, the receiver pauses and asks what to do:
+
+- overwrite
+- overwrite all
+- rename
+- rename all
+- skip
+- skip all
+
+That works functionally.
+
+## The actual problem
+
+The problem wasn't the conflict resolution itself. It was *when* it happened.
+
+Because the receiver streams the file directly into its temporary location, it can discover the conflict while the sender is still transferring. The receiver then needs to stop and resolve it.
+
+But the sender doesn't know that.
+
+So you've got a progress bar on the sender that doesn't really represent what's happening anymore.
+
+That's a much more interesting problem than "I wanted to improve conflict resolution."
+
+Receiver — v0.13.0 (before):
+
+```text title="Receiver — v0.13.0"
+Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1
+Receiving introducing-pxp.mdx ░░░ 0% | 0 B/s | 0s
+WARN Conflict detected for path: "./introducing-pxp.mdx"
+Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1
+Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1
+Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1
+Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1
+Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1  Receiving introducing-pxp.mdx ░░░ 0% |
+Portal: File 'introducing-pxp.mdx' received successfully!
+Portal: All item(s) have been received successfully! Saved to '.'
+```
+
+Receiver — v0.14.0 (after):
+
+```text title="Receiver — v0.14.0"
+Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1
+Receiving introducing-pxp.mdx ░░░ 0%
+Portal: File 'introducing-pxp.mdx' received successfully!
+> Portal: 'introducing-pxp.mdx' exists. Action? Overwrite
+Portal: All item(s) have been received successfully! Saved to '.'
+```
+
+## The constraint
+
+You deliberately don't want:
+
+> receive entire file → save it somewhere → check conflict → copy it to destination
+
+because that potentially means another full copy and unnecessary disk I/O.
+
+And the destination itself can be an external drive.
+
+So simply introducing another generic temp location isn't necessarily a good solution.
+
+That's where the `.portal/staging/<sessionId>` idea becomes meaningful — see [staging and conflicts](/docs/staging-conflicts).
+
+## The new architecture
+
+Instead of treating each received file as something that immediately needs its final destination:
+
+```text
+Receiver
+   ↓
+final/.portal/staging/<sessionId>/
+   ↓
+transfer finishes
+   ↓
+reconcile()
+   ↓
+final destination
+```
+
+Transfer and reconciliation become **separate phases**.
+
+During transfer, PXP's job is:
+
+> "Did I successfully receive the data?"
+
+After the session ends, `reconcile()` asks:
+
+> "Okay, what did I receive, and where should these files actually go?"
+
+That's the conceptual shift.
+
+## Conflict resolution becomes cleaner
+
+Now if a conflict exists, it happens during reconciliation.
+
+The sender doesn't have to know. The progress bar doesn't have to stop. The transfer doesn't have to wait for a human decision.
+
+*You finish receiving the data first, then deal with filesystem semantics afterward.*
+
+And there's another nice detail: if the sender disconnects unexpectedly, reconciliation can still inspect the staging directory and determine what was received before the cutoff.
+
+That makes `reconcile()` useful beyond just conflicts — see [interrupted transfers](/docs/staging-conflicts#interrupted-transfers).
+
+---
+
+Release: [v0.14.0](https://github.com/Spectra010s/portal/releases/tag/v0.14.0) · Diff: [v0.13.0...v0.14.0](https://github.com/Spectra010s/portal/compare/v0.13.0...v0.14.0) · Docs: [Staging and conflicts](/docs/staging-conflicts)

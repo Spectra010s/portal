@@ -49,7 +49,7 @@ export default async function Page({ params }: PageProps) {
         <MarkdownCopyButton markdownUrl={`${page.url}.md`} />
         <ViewOptionsPopover
           markdownUrl={`${page.url}.md`}
-          githubUrl={`https://github.com/Spectra010s/portal/blob/main/apps/web/content/${page.path}`}
+          githubUrl={`https://github.com/Spectra010s/portal/blob/main/apps/web/content/docs/${page.path}`}
         />
       </div>
       <DocsBody>
