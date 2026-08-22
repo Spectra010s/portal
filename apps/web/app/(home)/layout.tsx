@@ -27,6 +27,14 @@ export default function Layout({ children }: { children: ReactNode }) {
           url: "/docs",
         },
         {
+          text: "Blog",
+          url: "/blog",
+        },
+        {
+          text: "Changelog",
+          url: "/changelog",
+        },
+        {
           type: "icon",
           url: "https://github.com/Spectra010s/portal",
           label: "GitHub",
