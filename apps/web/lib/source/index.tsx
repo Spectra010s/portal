@@ -1,4 +1,5 @@
 import { loader } from "fumadocs-core/source";
+import { lucideIconsPlugin } from "fumadocs-core/source/lucide-icons";
 import { defineCollections, defineDocs } from "fumadocs-mdx/macro";
 import { pageSchema } from "fumadocs-core/source/schema";
 import { z } from "zod";
@@ -27,6 +28,7 @@ export const source = loader(
   },
   {
     baseUrl: "/docs",
+    plugins: [lucideIconsPlugin()],
   }
 );
 
