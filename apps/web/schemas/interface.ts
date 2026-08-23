@@ -32,3 +32,31 @@ export interface SoftwareApplicationNode {
   description: string;
   publisher: { "@id": string };
 }
+
+export interface BlogPostingNode {
+  "@type": "BlogPosting";
+  "@id": string;
+  headline: string;
+  description: string;
+  url: string;
+  image: { "@type": "ImageObject"; url: string };
+  author: { "@type": "Person"; name: string } | { "@id": string };
+  publisher: { "@id": string };
+  datePublished: string;
+  dateModified: string;
+  isPartOf: { "@id": string };
+  mainEntityOfPage: { "@type": "WebPage"; "@id": string };
+}
+
+export interface TechArticleNode {
+  "@type": "TechArticle";
+  "@id": string;
+  headline: string;
+  description: string;
+  url: string;
+  image: { "@type": "ImageObject"; url: string };
+  author: { "@id": string };
+  publisher: { "@id": string };
+  isPartOf: { "@id": string };
+  mainEntityOfPage: { "@type": "WebPage"; "@id": string };
+}

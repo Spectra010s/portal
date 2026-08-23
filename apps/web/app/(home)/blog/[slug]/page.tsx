@@ -4,6 +4,8 @@ import Link from "next/link";
 import { blogLoader } from "@/lib/source";
 import { DocsBody } from "fumadocs-ui/page";
 import defaultMdxComponents from "fumadocs-ui/mdx";
+import { createSchema, generateBreadcrumbNode } from "@/lib/schema";
+import { generateBlogPostingNode } from "@/schemas";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -17,8 +19,28 @@ export default async function BlogPostPage({ params }: PageProps) {
 
   const MDX = page.data.body;
 
+  const breadcrumb = generateBreadcrumbNode([
+    { name: "Blog", path: "/blog" },
+    { name: page.data.title, path: page.url },
+  ]);
+  const blogPosting = generateBlogPostingNode({
+    slug,
+    title: page.data.title,
+    description: page.data.description ?? "",
+    author: page.data.author,
+    date: page.data.date,
+  });
+  const schema = createSchema([breadcrumb, blogPosting]);
+
   return (
-    <article className="mx-auto w-full max-w-3xl flex-1 px-6 py-12 md:py-16">
+    <>
+      <script
+        key="blog-posting-schema"
+        id="blog-posting-schema"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      />
+      <article className="mx-auto w-full max-w-3xl flex-1 px-6 py-12 md:py-16">
       <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
         {new Date(page.data.date ?? "").toDateString()}
       </p>
@@ -42,6 +64,7 @@ export default async function BlogPostPage({ params }: PageProps) {
         </Link>
       </div>
     </article>
+    </>
   );
 }
 
