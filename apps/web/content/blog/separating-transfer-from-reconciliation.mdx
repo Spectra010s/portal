@@ -1,125 +1,187 @@
 ---
 title: Separating file transfer from file reconciliation in PXP
-description: How Portal v0.14 stages every receive and reconciles afterward — so progress stays clean and cut connections can still be recovered.
+description: How Portal v0.14.0 stages every receive and reconciles afterward — so progress stays clean and interrupted transfers can still be recovered.
 author: Spectra010s
 date: 2026-08-18
 ---
 
-Portal had conflict resolution working, but then I realized it was interfering with something that should have been completely independent: **transfer progress**.
+Portal has had file conflict resolution since v0.10.0.
 
-The progress bar would tweak and dangle, overwritten by conflict prompts while bytes were still streaming from the sender.
+It worked, but while working on v0.13.0, I noticed that the way conflicts were being handled had an unintended side effect: conflict resolution was happening in the middle of a file transfer.
 
-## What already existed
+That shouldn't have anything to do with **transfer progress**.
 
-Portal has had conflict resolution since v0.10.0.
+So in v0.14.0, I changed the architecture.
 
-When receiving a file:
+## How receiving worked before
+
+When Portal received a file, the data was streamed from the sender into a temporary location before being moved into the final directory:
 
 ```text
 sender → stream → temp → final directory
 ```
 
-If the filename already exists, the receiver pauses and asks what to do:
+If the destination already contained a file with the same name, Portal would detect the conflict and ask how to handle it.
+
+The available actions were:
 
 - overwrite
-- overwrite all
+- overwrite all for this transfer
 - rename
-- rename all
+- rename all for this transfer
 - skip
-- skip all
+- skip all for this transfer
 
-That works functionally.
+This worked correctly from a filesystem perspective.
 
-## The actual problem
+The problem was *when* the conflict was detected.
 
-The problem wasn't the conflict resolution itself. It was *when* it happened.
+Because the file was being streamed as it arrived, the receiver could discover the conflict while the sender was still transferring the file.
 
-Because the receiver streams the file directly into its temporary location, it can discover the conflict while the sender is still transferring. The receiver then needs to stop and resolve it.
+At that point, the receiver had to stop and wait for the conflict to be resolved.
 
-But the sender doesn't know that.
+The sender, however, had no idea that this was happening.
 
-So you've got a progress bar on the sender that doesn't really represent what's happening anymore.
+That created a particularly ugly interaction with the progress display.
 
-That's a much more interesting problem than "I wanted to improve conflict resolution."
+v0.13.0
 
-Receiver — v0.13.0 (before):
+A conflict could leave the receiver looking something like this:
 
 ```text title="Receiver — v0.13.0"
 Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1
-Receiving introducing-pxp.mdx ░░░ 0% | 0 B/s | 0s
+Receiving introducing-pxp.mdx ░░░░░░░░░░░░ 0% | 0 B/s | 0s
 WARN Conflict detected for path: "./introducing-pxp.mdx"
 Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1
 Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1
 Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1
 Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1
-Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1  Receiving introducing-pxp.mdx ░░░ 0% |
+Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1  Receiving introducing-pxp.mdx ░░░░░░░░░░░░ 0% |
 Portal: File 'introducing-pxp.mdx' received successfully!
 Portal: All item(s) have been received successfully! Saved to '.'
 ```
 
-Receiver — v0.14.0 (after):
+The transfer itself and the filesystem decision had become coupled.
 
-```text title="Receiver — v0.14.0"
-Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1
-Receiving introducing-pxp.mdx ░░░ 0%
-Portal: File 'introducing-pxp.mdx' received successfully!
-> Portal: 'introducing-pxp.mdx' exists. Action? Overwrite
-Portal: All item(s) have been received successfully! Saved to '.'
-```
+They needed to be independent.
 
 ## The constraint
 
-You deliberately don't want:
-
-> receive entire file → save it somewhere → check conflict → copy it to destination
-
-because that potentially means another full copy and unnecessary disk I/O.
-
-And the destination itself can be an external drive.
-
-So simply introducing another generic temp location isn't necessarily a good solution.
-
-That's where the `.portal/staging/<sessionId>` idea becomes meaningful — see [staging and conflicts](/docs/staging-conflicts).
-
-## The new architecture
-
-Instead of treating each received file as something that immediately needs its final destination:
+The obvious solution would be to receive the entire file somewhere first, check for conflicts, and then copy it into the destination:
 
 ```text
-Receiver
+receive → save → check conflict → copy → destination
+```
+
+But that introduces another problem.
+
+Portal streams files specifically to avoid unnecessary disk usage and copying. If the destination is an external drive, receiving into one location and then copying the entire file to another can introduce significant additional I/O.
+
+I didn't want to solve the progress problem by creating a different disk-I/O problem.
+
+So the staging location needed to live alongside the destination.
+
+## Staging
+
+In v0.14.0, received files are staged inside the final directory:
+
+```text
+final/
+└── .portal/
+    └── staging/
+        └── <sessionId>/
+```
+
+The transfer and the final placement of the file are now two separate operations.
+
+During the transfer:
+
+```text
+sender
    ↓
-final/.portal/staging/<sessionId>/
+stream
    ↓
-transfer finishes
+.portal/staging/<sessionId>/
+```
+
+Once the transfer session has finished, Portal reconciles what was received:
+
+```text
+.portal/staging/<sessionId>/
    ↓
 reconcile()
    ↓
 final destination
 ```
 
-Transfer and reconciliation become **separate phases**.
+This is the main change in PXP.
 
-During transfer, PXP's job is:
+Transfer first, reconcile afterward
 
-> "Did I successfully receive the data?"
+The transfer phase no longer needs to care about whether a file can immediately be placed in its final location.
 
-After the session ends, `reconcile()` asks:
+Its job is simply to receive the data.
 
-> "Okay, what did I receive, and where should these files actually go?"
+Once the transfer is complete, `reconcile()` takes over.
 
-That's the conceptual shift.
+That's where Portal can determine:
 
-## Conflict resolution becomes cleaner
+- which files were received
+- where they should go
+- whether a destination already exists
+- what to do when a conflict occurs
 
-Now if a conflict exists, it happens during reconciliation.
+Conflict resolution still works the same way from the user's perspective.
 
-The sender doesn't have to know. The progress bar doesn't have to stop. The transfer doesn't have to wait for a human decision.
+The difference is that it no longer interrupts the transfer itself.
 
-*You finish receiving the data first, then deal with filesystem semantics afterward.*
+v0.14.0
 
-And there's another nice detail: if the sender disconnects unexpectedly, reconciliation can still inspect the staging directory and determine what was received before the cutoff.
+The same situation now looks more like:
 
-That makes `reconcile()` useful beyond just conflicts — see [interrupted transfers](/docs/staging-conflicts#interrupted-transfers).
+```text title="Receiver — v0.14.0"
+Portal: Receiving item 1 of 1 [━━━━━━━━━━━━━━] 1/1
+Receiving introducing-pxp.mdx ░░░░░░░░░░░░ 0%
+Portal: File 'introducing-pxp.mdx' received successfully!
+> Portal: 'introducing-pxp.mdx' exists. Action? Overwrite
+Portal: All item(s) have been received successfully! Saved to '.'
+```
+
+The transfer can finish before Portal asks what should happen to the file.
+
+The progress display no longer has to compete with conflict resolution.
+
+## Reconciliation also helps with interrupted transfers
+
+Separating these two phases had another useful consequence.
+
+A transfer doesn't always end normally.
+
+The sender might disconnect, the connection might be interrupted, or the session might otherwise end before everything has been transferred.
+
+Because the received data is staged by session, the receiver has something it can inspect after the connection is gone.
+
+`reconcile()` can check the staging area and determine what was received before the session ended, then handle those files accordingly.
+
+So reconciliation isn't only a mechanism for resolving filename conflicts.
+
+It also gives Portal a defined place to deal with the state left behind by an interrupted transfer — see [interrupted transfers](/docs/staging-conflicts#interrupted-transfers).
+
+See [staging and conflicts](/docs/staging-conflicts) for more details.
+
+## A cleaner separation of responsibilities
+
+The change in v0.14.0 is ultimately less about adding another directory and more about separating two responsibilities that had previously been mixed together.
+
+Transfer is responsible for getting the data from the sender to the receiver.
+
+Reconciliation is responsible for deciding what happens to that received data on the filesystem.
+
+That separation means conflict resolution no longer has to interfere with streaming, and the transfer itself doesn't have to wait for filesystem decisions.
+
+PXP can receive first.
+
+Then it can reconcile.
 
 ---
 
