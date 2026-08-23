@@ -14,6 +14,8 @@ export const metadata: Metadata = {
   },
   description:
     "Portal: A lightweight CLI tool to transfer files between devices locally or remotely.",
+  authors: [{ name: "Spectra010s", url: "https://spectra010s.biuld.app" }],
+  creator: "Spectra010s",
   manifest: "/manifest.json",
   alternates: {
     canonical: "/",

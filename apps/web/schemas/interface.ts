@@ -14,7 +14,13 @@ export interface WebSiteNode {
   url: string;
   name: string;
   alternateName?: string;
+  description?: string;
   publisher: { "@id": string };
+  creator?: {
+    "@type": "Person";
+    name: string;
+    url: string;
+  };
   potentialAction: {
     "@type": "SearchAction";
     target: string;
@@ -31,6 +37,11 @@ export interface SoftwareApplicationNode {
   url: string;
   description: string;
   publisher: { "@id": string };
+  author?: { "@type": "Person"; name: string; url: string };
+  creator?: { "@type": "Person"; name: string; url: string };
+  codeRepository?: string;
+  downloadUrl?: string;
+  sameAs?: string[];
 }
 
 export interface BlogPostingNode {
