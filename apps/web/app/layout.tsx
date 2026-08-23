@@ -7,7 +7,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Hiverra Portal",
+    default: "Best File Transfer Tool — Hiverra Portal",
     template: "%s | Portal",
   },
   description:
@@ -42,10 +42,10 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     type: "website",
-    title: "Hiverra Portal",
+    title: "Best File Transfer Tool — Hiverra Portal",
     description:
       "Portal: A lightweight CLI tool to transfer files between devices locally or remotely.",
-    siteName: "Portal",
+    siteName: "Hiverra Portal",
     images: [
       {
         url: "/opengraph-image",
@@ -57,7 +57,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Hiverra Portal",
+    title: "Best File Transfer Tool — Hiverra Portal",
     description:
       "Portal: A lightweight CLI tool to transfer files between devices locally or remotely.",
     images: ["/opengraph-image"],
