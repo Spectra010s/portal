@@ -1,5 +1,7 @@
 import { source } from "@/lib/source";
 import { notFound } from "next/navigation";
+import { createSchema, generateBreadcrumbNode } from "@/lib/schema";
+import { generateTechArticleNode } from "@/schemas";
 import {
   DocsPage,
   DocsBody,
@@ -41,8 +43,26 @@ export default async function Page({ params }: PageProps) {
 
   const MDX = page.data.body;
 
+  const breadcrumb = generateBreadcrumbNode([
+    { name: "Docs", path: "/docs" },
+    { name: page.data.title, path: page.url },
+  ]);
+  const techArticle = generateTechArticleNode({
+    title: page.data.title,
+    description: page.data.description,
+    url: page.url,
+  });
+  const schema = createSchema([breadcrumb, techArticle]);
+
   return (
-    <DocsPage toc={page.data.toc} full={page.data.full}>
+    <>
+      <script
+        key="docs-breadcrumb-schema"
+        id="docs-breadcrumb-schema"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      />
+      <DocsPage toc={page.data.toc} full={page.data.full}>
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <div className="flex flex-row flex-wrap gap-2 items-center border-b pb-6 mb-6">
@@ -56,6 +76,7 @@ export default async function Page({ params }: PageProps) {
         <MDX components={mdxComponents} />
       </DocsBody>
     </DocsPage>
+    </>
   );
 }
 

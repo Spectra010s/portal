@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { RootProvider } from "fumadocs-ui/provider/next";
+import { createSchema } from "@/lib/schema";
+import { softwareNode, websiteNode } from "@/schemas";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app";
 
@@ -12,6 +14,8 @@ export const metadata: Metadata = {
   },
   description:
     "Portal: A lightweight CLI tool to transfer files between devices locally or remotely.",
+  authors: [{ name: "Spectra010s", url: "https://spectra010s.biuld.app" }],
+  creator: "Spectra010s",
   manifest: "/manifest.json",
   alternates: {
     canonical: "/",
@@ -70,6 +74,8 @@ export const viewport: Viewport = {
   themeColor: "#0369a1",
 };
 
+const schema = createSchema([websiteNode, softwareNode]);
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -83,6 +89,12 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body>
+        <script
+          key="website-software-schema"
+          id="website-software-schema"
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+        />
         <RootProvider>{children}</RootProvider>
       </body>
     </html>
