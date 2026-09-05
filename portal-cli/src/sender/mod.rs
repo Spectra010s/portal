@@ -234,7 +234,7 @@ pub async fn start_send(
         actual_bytes = intended_bytes;
 
         // --- Send stream using core ---
-        pxp::sender::send_stream(
+        let transfer_result = pxp::sender::send_stream(
             stream,
             items_to_send,
             *no_compress,
@@ -247,7 +247,18 @@ pub async fn start_send(
             total_items, r_addr
         );
 
-        prog.println("Portal: All file(s) have been sent successfully!");
+        // If the receiver confirmed a failure, surface it so the history
+        // record reflects the real outcome rather than a false success.
+        if !transfer_result.success {
+            let reason = transfer_result
+                .error
+                .as_deref()
+                .unwrap_or("receiver reported failure without details");
+            warn!("Receiver reported transfer failure: {}", reason);
+            prog.println(&format!("Portal: Warning — receiver reported an error: {}", reason));
+        } else {
+            prog.println("Portal: All file(s) have been sent successfully!");
+        }
 
         let duration_ms = start_instant.elapsed().as_millis() as u64;
         debug!(

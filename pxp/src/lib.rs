@@ -18,6 +18,7 @@ pub mod receiver;
 pub mod sender;
 
 pub use error::{PxpError, Result};
+pub use metadata::TransferResult;
 
 use tokio::io::{AsyncRead, AsyncWrite};
 

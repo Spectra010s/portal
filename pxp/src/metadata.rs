@@ -1,5 +1,21 @@
 use serde::{Deserialize, Serialize};
 
+/// Outcome frame sent by the receiver to the sender after the full TAR stream
+/// has been consumed and all staged items have been reconciled into the target
+/// directory.  The sender blocks on this before recording its history entry,
+/// so both sides converge on the same success/failure view of the transfer.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TransferResult {
+    /// `true` when every item was staged and reconciled without error.
+    pub success: bool,
+    /// Number of top-level items that were successfully moved into place.
+    pub items_received: u32,
+    /// Total bytes written to the target directory.
+    pub bytes_received: u64,
+    /// Human-readable error description when `success` is `false`.
+    pub error: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GlobalTransferManifest {
     pub total_files: u32,
