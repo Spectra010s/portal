@@ -1,10 +1,10 @@
 use {
     crate::{
-        metadata::{ReceiveSummary, TransferResult},
+        metadata::{ReceiveSummary, ReceiverAbortKind, ReceiverError, TransferResult},
         receiver::receive_item::{receive_item, StagedItem, StagedTransfer},
         TransferProgress,
     },
-    crate::error::Result,
+    crate::error::{PxpError, Result},
     async_compression::tokio::bufread::GzipDecoder,
     bincode,
     std::{
@@ -191,5 +191,62 @@ async fn prune_staging_parents(staging_dir: &Path) {
         if let Some(portal) = stage.parent() {
             let _ = tokio::fs::remove_dir(portal).await;
         }
+    }
+}
+
+/// Attempts to send a [`ReceiverError`] abort frame to the sender over the raw
+/// TCP socket before dropping the connection.
+///
+/// This gives the sender a structured reason for the abort so it can display a
+/// meaningful error instead of a bare `BrokenPipe` or `ConnectionReset`. The
+/// write is best-effort: if it fails we log and return without propagating —
+/// the transfer has already failed at this point and we do not want the
+/// notification attempt to shadow the original error.
+///
+/// Frame layout:
+/// ```text
+/// [ length: u32 big-endian ][ bincode-encoded ReceiverError ]
+/// ```
+pub async fn send_abort_to_sender(socket: &mut TcpStream, err: &PxpError) {
+    let kind = classify_abort_kind(err);
+    let frame = ReceiverError {
+        kind,
+        message: err.to_string(),
+    };
+    match bincode::serialize(&frame) {
+        Ok(payload) => {
+            let len = payload.len() as u32;
+            let mut buf = Vec::with_capacity(4 + payload.len());
+            buf.extend_from_slice(&len.to_be_bytes());
+            buf.extend_from_slice(&payload);
+            if let Err(e) = socket.write_all(&buf).await {
+                warn!("Failed to send abort frame to sender: {}", e);
+            } else if let Err(e) = socket.flush().await {
+                warn!("Failed to flush abort frame: {}", e);
+            } else {
+                debug!("Abort frame sent to sender: kind={:?}", frame.kind);
+            }
+        }
+        Err(e) => warn!("Failed to serialise abort frame: {}", e),
+    }
+}
+
+/// Maps a [`PxpError`] to the appropriate [`ReceiverAbortKind`] for the abort
+/// frame, so the sender can show a meaningful category without parsing strings.
+fn classify_abort_kind(err: &PxpError) -> ReceiverAbortKind {
+    match err {
+        PxpError::Io(io_err) => {
+            if io_err.kind() == std::io::ErrorKind::StorageFull
+                || io_err.raw_os_error() == Some(28) // ENOSPC on Linux
+                || io_err.raw_os_error() == Some(112) // ERROR_DISK_FULL on Windows
+            {
+                ReceiverAbortKind::DiskFull
+            } else {
+                ReceiverAbortKind::WriteError
+            }
+        }
+        PxpError::Protocol(_) | PxpError::Security(_) => ReceiverAbortKind::ProtocolError,
+        PxpError::ConflictResolution(_) => ReceiverAbortKind::UserCancelled,
+        _ => ReceiverAbortKind::Other,
     }
 }

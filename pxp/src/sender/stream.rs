@@ -16,6 +16,59 @@ use {
     tracing::{debug, info, trace, warn},
 };
 
+/// Attempt to read a [`crate::metadata::ReceiverError`] abort frame from the
+/// socket when the send side gets an unexpected connection error.
+///
+/// If the receiver sent an abort frame before dropping the connection it will
+/// be sitting in the socket's receive buffer. Reading it here turns an opaque
+/// `BrokenPipe` into a meaningful error message like "receiver ran out of disk
+/// space" or "user cancelled".
+///
+/// This is best-effort: if no frame is available (e.g. the connection dropped
+/// cleanly or the receiver is an older build) we return the original error.
+async fn try_read_receiver_abort(socket: &mut TcpStream, original: PxpError) -> PxpError {
+    use crate::metadata::ReceiverError;
+
+    let mut len_buf = [0u8; 4];
+    // Use a very short timeout — if the frame is in the buffer it will be
+    // available immediately. We do not want to block the error path.
+    match tokio::time::timeout(
+        std::time::Duration::from_millis(200),
+        socket.read_exact(&mut len_buf),
+    )
+    .await
+    {
+        Ok(Ok(_)) => {}
+        _ => return original, // timeout or read error — no frame waiting
+    }
+
+    let payload_len = u32::from_be_bytes(len_buf) as usize;
+    if payload_len == 0 || payload_len > 4096 {
+        return original;
+    }
+
+    let mut payload = vec![0u8; payload_len];
+    if socket.read_exact(&mut payload).await.is_err() {
+        return original;
+    }
+
+    match bincode::deserialize::<ReceiverError>(&payload) {
+        Ok(abort) => {
+            warn!(
+                "Receiver sent structured abort ({:?}): {}",
+                abort.kind, abort.message
+            );
+            // Wrap the receiver's message in an Io error so it surfaces
+            // cleanly through anyhow's error chain in the CLI.
+            PxpError::Io(std::io::Error::new(
+                std::io::ErrorKind::ConnectionAborted,
+                format!("Receiver aborted: {}", abort.message),
+            ))
+        }
+        Err(_) => original,
+    }
+}
+
 async fn stream_items<W: AsyncWrite + Unpin + Send>(
     builder: &mut Builder<W>,
     items_to_send: Vec<(PathBuf, TransferItem)>,
@@ -58,7 +111,7 @@ async fn stream_items<W: AsyncWrite + Unpin + Send>(
 }
 
 pub async fn send_stream(
-    stream: TcpStream,
+    mut stream: TcpStream,
     items_to_send: Vec<(PathBuf, TransferItem)>,
     no_compress: bool,
     progress: Option<&dyn TransferProgress>,
@@ -67,7 +120,16 @@ pub async fn send_stream(
         debug!("Initializing Tar builder (no compression)...");
         let mut builder = Builder::new(stream);
         info!("Starting TAR stream to network (no compression)...");
-        stream_items(&mut builder, items_to_send, progress).await?;
+
+        if let Err(e) = stream_items(&mut builder, items_to_send, progress).await {
+            stream = builder.into_inner().await.unwrap_or_else(|_| {
+                // If we can't recover the stream we can't probe for an abort frame.
+                // Return a dummy TcpStream by panicking is wrong — just surface the
+                // original error as-is in this edge case.
+                unreachable!("into_inner should not fail on an uncompressed builder")
+            });
+            return Err(try_read_receiver_abort(&mut stream, e).await);
+        }
 
         debug!("Finalizing Tar archive structure...");
         builder.finish().await?;
@@ -83,7 +145,15 @@ pub async fn send_stream(
         let mut builder = Builder::new(compressor);
 
         info!("Starting TAR stream to network...");
-        stream_items(&mut builder, items_to_send, progress).await?;
+        if let Err(e) = stream_items(&mut builder, items_to_send, progress).await {
+            // Recover the socket through the encoder for abort-frame probing.
+            if let Ok(mut compressor) = builder.into_inner().await {
+                let _ = compressor.shutdown().await;
+                let mut raw = compressor.into_inner();
+                return Err(try_read_receiver_abort(&mut raw, e).await);
+            }
+            return Err(e);
+        }
 
         debug!("Finalizing Tar archive structure...");
         builder.finish().await?;
