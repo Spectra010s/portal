@@ -197,7 +197,7 @@ pub async fn start_send(
         println!("Portal: Preparing to send {} items(s)...", total_items);
 
         // --- Progress + history tracking ---
-        let prog = ProgressManager::new();
+        let prog = ProgressManager::new_with_side(crate::progress::Side::Sender);
         debug!("Progress UI created for sender");
         prog.set_total_items(total_items);
 
