@@ -5,7 +5,7 @@ export const generateTechArticleNode = (input: {
   description?: string;
   url: string;
 }): TechArticleNode => {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.spectra010s.com";
   const absUrl = input.url.startsWith("http") ? input.url : `${siteUrl}${input.url.startsWith("/") ? input.url : `/${input.url}`}`;
   return {
     "@type": "TechArticle",

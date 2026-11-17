@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { source } from "@/lib/source";
 import Image from "next/image";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.spectra010s.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { source, blogLoader } from "@/lib/source";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.spectra010s.com";
 
   const docsPages = source.getPages().map((page) => ({
     url: `${siteUrl}${page.url}`,

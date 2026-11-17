@@ -160,7 +160,7 @@ portal update
 - Default log file level is `debug`.
 - Logs are written to `~/.portal/_logs/`.
 - `PORTAL_LOG` is preferred over `RUST_LOG` when both are set.
-- For troubleshooting noisy or missing logs, see [Troubleshooting](https://portal.biuld.app/docs/troubleshooting).
+- For troubleshooting noisy or missing logs, see [Troubleshooting](https://portal.spectra010s.com/docs/troubleshooting).
 
 ## How to Run or Use It
 
@@ -235,12 +235,12 @@ portal config list
 
 Detailed guides for every workflow:
 
-- [Docs Home](https://portal.biuld.app/docs)
-- [Install](https://portal.biuld.app/docs/install)
-- [Usage](https://portal.biuld.app/docs/usage)
-- [CLI to CLI](https://portal.biuld.app/docs/cli-cli)
-- [Troubleshooting](https://portal.biuld.app/docs/troubleshooting)
-- [FAQ](https://portal.biuld.app/docs/faq)
+- [Docs Home](https://portal.spectra010s.com/docs)
+- [Install](https://portal.spectra010s.com/docs/install)
+- [Usage](https://portal.spectra010s.com/docs/usage)
+- [CLI to CLI](https://portal.spectra010s.com/docs/cli-cli)
+- [Troubleshooting](https://portal.spectra010s.com/docs/troubleshooting)
+- [FAQ](https://portal.spectra010s.com/docs/faq)
 
 Docs source of truth:
 
@@ -256,7 +256,7 @@ Docs source of truth:
 ## Author
 
 Github: [Spectra010s](https://github.com/Spectra010s)
-Portfolio: [spectra010s.biuld.app](https://spectra010s.biuld.app)
+Portfolio: [spectra010s.com](https://spectra010s.com)
 
 ## License
 
