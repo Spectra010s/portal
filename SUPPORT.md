@@ -7,8 +7,8 @@ Use GitHub issues for bugs, reproducible failures, and scoped feature requests.
 Check these first:
 
 - README: https://github.com/Spectra010s/portal#readme
-- Docs: https://portal.biuld.app/docs
-- Troubleshooting: https://portal.biuld.app/docs/troubleshooting
+- Docs: https://portal.spectra010s.com/docs
+- Troubleshooting: https://portal.spectra010s.com/docs/troubleshooting
 
 ## Bugs
 

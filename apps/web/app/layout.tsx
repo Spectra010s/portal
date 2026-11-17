@@ -4,7 +4,7 @@ import { RootProvider } from "fumadocs-ui/provider/next";
 import { createSchema } from "@/lib/schema";
 import { softwareNode, websiteNode } from "@/schemas";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.spectra010s.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   },
   description:
     "Portal: A lightweight CLI tool to transfer files between devices locally or remotely.",
-  authors: [{ name: "Spectra010s", url: "https://spectra010s.biuld.app" }],
+  authors: [{ name: "Spectra010s", url: "https://spectra010s.com" }],
   creator: "Spectra010s",
   manifest: "/manifest.json",
   alternates: {

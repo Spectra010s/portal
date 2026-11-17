@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 export const revalidate = false;
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.spectra010s.com";
 
 export function GET() {
   const feed = new Feed({

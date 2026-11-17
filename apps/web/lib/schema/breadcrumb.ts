@@ -1,6 +1,6 @@
 import type { BreadcrumbListNode } from "@/schemas/interface";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.spectra010s.com";
 
 const toAbsoluteUrl = (path: string) => {
   if (path.startsWith("http://") || path.startsWith("https://")) return path;

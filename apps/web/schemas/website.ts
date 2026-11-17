@@ -1,7 +1,7 @@
 import type { WebSiteNode } from "./interface";
 import { creator } from "./creator";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.spectra010s.com";
 
 export const websiteNode: WebSiteNode = {
   "@type": "WebSite",

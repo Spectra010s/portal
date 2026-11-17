@@ -1,6 +1,6 @@
 import type { BlogPostingNode } from "./interface";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.biuld.app";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://portal.spectra010s.com";
 
 export const generateBlogPostingNode = (input: {
   slug: string;
