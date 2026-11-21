@@ -6,14 +6,12 @@ use std::{
 };
 use tracing::debug;
 
-#[derive(Clone)]
-pub struct ProgressManager {
-    mp: MultiProgress,
-    top: ProgressBar,
-    side: Side,
-}
-
-// Which side of the transfer this manager is used for.
+/// Which side of the transfer this [`ProgressManager`] is used for.
+///
+/// This is always required at construction time so call sites are explicit about
+/// their role. There is intentionally no `Default` / `new()` shorthand — having
+/// a default that silently assumes `Sender` is a footgun that caused a past bug
+/// where the receiver showed "Sending item N of M" in its progress header.
 #[derive(Clone, Copy, Debug)]
 pub enum Side {
     Sender,
@@ -29,28 +27,54 @@ impl Side {
     }
 }
 
-impl ProgressManager {
-    pub fn new() -> Self {
-        Self::new_with_side(Side::Sender)
-    }
+/// Manages the terminal progress UI for a single transfer.
+///
+/// Layout (top → bottom, drawn on stderr):
+/// ```text
+/// Portal: Sending item 2 of 5  [━━━━━━━━━━╾──────────────────────────────]  2/5
+/// Sending large_file.bin ████████████████░░░░░░░░░░░░  64% | 12 MB/s | 3s
+/// ```
+///
+/// The header bar (`top`) is pinned at the top by using `MultiProgress::insert_after`
+/// for every item bar, so new bars always appear below the header rather than
+/// pushing it down. `enable_steady_tick` on the header keeps indicatif from
+/// considering it "idle" and collapsing it during long per-file renders.
+#[derive(Clone)]
+pub struct ProgressManager {
+    mp: MultiProgress,
+    top: ProgressBar,
+    side: Side,
+}
 
+impl ProgressManager {
+    /// Create a new progress manager for the given transfer side.
     pub fn new_with_side(side: Side) -> Self {
         debug!("Progress UI initialized: {:?}", side);
         let mp = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(10));
+
+        // The header bar lives at index 0. Every item bar is inserted after it
+        // via insert_after(), so the header never moves.
         let top = mp.add(ProgressBar::new(0));
         let style = ProgressStyle::with_template("{msg} [{bar:40.green/white}] {pos}/{len}")
             .unwrap_or_else(|_| ProgressStyle::default_bar())
             .progress_chars("━╾─");
         top.set_style(style);
         top.set_message(format!("Portal: {}", side.verb()));
+        // Steady tick prevents indicatif from treating the header as "idle"
+        // and skipping redraws while item bars are active below it.
+        top.enable_steady_tick(Duration::from_millis(100));
+
         Self { mp, top, side }
     }
 
     pub fn set_total_items(&self, total: usize) {
         debug!("Progress UI total items set to {}", total);
         self.top.set_length(total as u64);
-        self.top
-            .set_message(format!("Portal: {} item 0 of {}", self.side.verb(), total));
+        self.top.set_message(format!(
+            "Portal: {} item 0 of {}",
+            self.side.verb(),
+            total
+        ));
     }
 
     pub fn set_current_item(&self, current: usize, total: usize) {
@@ -64,13 +88,18 @@ impl ProgressManager {
         ));
     }
 
+    /// Create a new per-file progress bar inserted *below* the sticky header.
+    ///
+    /// Using `insert_after` instead of `add` is what keeps the header pinned:
+    /// indicatif renders bars in insertion order, so all item bars always appear
+    /// after the header regardless of how many are active simultaneously.
     pub fn create_file_bar(&self, filename: &str, total_bytes: u64) -> ProgressBar {
         debug!(
             "Progress UI file bar created for '{}' ({} bytes)",
             filename, total_bytes
         );
         let total = if total_bytes == 0 { 1 } else { total_bytes };
-        let pb = ProgressBar::new(total);
+        let pb = self.mp.insert_after(&self.top, ProgressBar::new(total));
         let sty = ProgressStyle::with_template(
             "{msg} {bar:40.cyan/blue} {percent:>3}% | {bytes_per_sec} | {eta}",
         )
@@ -81,20 +110,25 @@ impl ProgressManager {
         if total_bytes == 0 {
             pb.set_position(1);
         }
-        self.mp.add(pb)
+        pb
     }
 
+    /// Print a status line above the progress bars without corrupting their layout.
     pub fn println<S: AsRef<str>>(&self, msg: S) {
         let _ = self.mp.println(msg);
     }
 
-    /// Stops and clears the progress UI. Called once the stream completes, before any
-    /// conflict prompts or final status output, so the terminal stays clean.
+    /// Stop the header bar and clear the entire progress UI.
+    ///
+    /// Call this once the stream completes (success or failure), before any
+    /// conflict prompts or final status lines, so the terminal is clean.
     pub fn finish(&self) {
         self.top.finish_and_clear();
         let _ = self.mp.clear();
     }
 }
+
+// ── Blocking download spinner used by the update command ─────────────────────
 
 pub fn stream_download_with_spinner<R: Read, W: Write>(
     reader: &mut R,
@@ -135,7 +169,6 @@ pub fn stream_download_with_spinner<R: Read, W: Write>(
 
     let mut downloaded = 0_u64;
     let mut buf = [0_u8; 16 * 1024];
-
     loop {
         let n = reader.read(&mut buf)?;
         if n == 0 {
@@ -147,30 +180,27 @@ pub fn stream_download_with_spinner<R: Read, W: Write>(
             progress.set_position(downloaded);
         }
     }
-
     writer.flush()?;
     progress.finish_with_message(format!("Portal: {} complete", label));
     Ok(downloaded)
 }
 
-/// PXP Trait Implementations 
+// ── pxp trait bridge ──────────────────────────────────────────────────────────
 //
-// We want to keep the core `pxp` engine completely free of terminal-specific code (no println, no indicatif).
-// To do that, the engine defines abstract traits `ItemProgress` and `TransferProgress`.
-// Here in the CLI, we implement those traits using our terminal progress bar manager (`indicatif`).
-// This acts as a bridge: `pxp` handles the raw data bytes, calls these hooks, and our adapters update the terminal screen!
+// The pxp engine is kept free of terminal-specific code. It exposes
+// ItemProgress and TransferProgress as abstract traits, and we implement them
+// here using indicatif so the engine never imports a terminal library.
+
 use pxp::{ItemProgress, TransferProgress};
 use tokio::io::{AsyncRead, AsyncWrite};
 
-/// An adapter that wraps a standard `indicatif` ProgressBar to implement the core's `ItemProgress` trait.
+/// Bridges a single `indicatif` `ProgressBar` to the `ItemProgress` trait.
 pub struct IndicatifItemProgress {
     pb: ProgressBar,
 }
 
 impl ItemProgress for IndicatifItemProgress {
-    // When the core starts reading/writing a file, it calls these wrapping functions.
-    // We use indicatif's built-in wrapper streams so that as the core reads/writes bytes,
-    // the progress bar updates automatically without any manual byte counting in the engine.
+    /// Wrap the reader so indicatif intercepts byte reads and updates the bar.
     fn wrap_read(
         &self,
         reader: Box<dyn AsyncRead + Unpin + Send>,
@@ -178,6 +208,7 @@ impl ItemProgress for IndicatifItemProgress {
         Box::new(self.pb.wrap_async_read(reader))
     }
 
+    /// Wrap the writer so indicatif intercepts byte writes and updates the bar.
     fn wrap_write(
         &self,
         writer: Box<dyn AsyncWrite + Unpin + Send>,
@@ -185,14 +216,12 @@ impl ItemProgress for IndicatifItemProgress {
         Box::new(self.pb.wrap_async_write(writer))
     }
 
-    // Called when the transfer of a single item is finished. We clean up the bar from the terminal.
     fn finish_and_clear(&self) {
         self.pb.finish_and_clear();
     }
 }
 
 impl TransferProgress for ProgressManager {
-    // The core calls these to set overall transfer progress (e.g. "Sending file 2 of 5").
     fn set_total_items(&self, total: usize) {
         ProgressManager::set_total_items(self, total);
     }
@@ -201,14 +230,11 @@ impl TransferProgress for ProgressManager {
         ProgressManager::set_current_item(self, current, total);
     }
 
-    // When the core starts a new item, it requests an `ItemProgress` tracker from us.
-    // We create a fresh file progress bar and wrap it in our adapter.
     fn create_item_progress(&self, name: &str, total_bytes: u64) -> Box<dyn ItemProgress> {
         let pb = self.create_file_bar(name, total_bytes);
         Box::new(IndicatifItemProgress { pb })
     }
 
-    // Lets the core print text status messages cleanly without breaking the active progress bar layouts.
     fn println(&self, msg: &str) {
         ProgressManager::println(self, msg);
     }

@@ -4,3 +4,4 @@ pub mod receive_item;
 pub mod stream;
 
 pub use receive_item::{reconcile, StagedItem, StagedTransfer};
+pub use stream::send_abort_to_sender;
